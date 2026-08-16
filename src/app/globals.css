@@ -1,0 +1,79 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #0b090c;
+  --bg-elev: #141117;
+  --card: #1b171e;
+  --line: rgba(255, 236, 220, 0.1);
+  --ink: #f6efe6;
+  --muted: #a3988d;
+  --red: #c0392b;
+  --red-2: #e74c3c;
+  --gold: #d4b06a;
+  --citizen: #7dcea0;
+  --mafia: #e74c3c;
+  --indie: #af7ac5;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-bg-elev: var(--bg-elev);
+  --color-card: var(--card);
+  --color-line: var(--line);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-red: var(--red);
+  --color-red-2: var(--red-2);
+  --color-gold: var(--gold);
+  --color-citizen: var(--citizen);
+  --color-mafia: var(--mafia);
+  --color-indie: var(--indie);
+  --font-sans: var(--font-vazir);
+  --font-display: var(--font-display);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--ink);
+}
+
+body {
+  font-family: var(--font-vazir), system-ui, sans-serif;
+  background:
+    radial-gradient(1200px 600px at 50% -10%, rgba(192, 57, 43, 0.18), transparent 55%),
+    radial-gradient(800px 400px at 100% 100%, rgba(212, 176, 106, 0.08), transparent 50%),
+    var(--bg);
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.display {
+  font-family: var(--font-display), var(--font-vazir), serif;
+  letter-spacing: 0.02em;
+}
+
+.card-3d {
+  transform-style: preserve-3d;
+  transition: transform 0.7s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.card-3d.flipped {
+  transform: rotateY(180deg);
+}
+
+.card-face {
+  backface-visibility: hidden;
+}
+
+.card-back {
+  transform: rotateY(180deg);
+}

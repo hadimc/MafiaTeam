@@ -1,0 +1,235 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String    @id @default(cuid())
+  username       String    @unique
+  email          String    @unique
+  passwordHash   String?
+  displayName    String
+  displayNameEn  String    @default("")
+  isAdmin        Boolean   @default(false)
+  enabled        Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+
+  createdEvents     Event[]             @relation("EventCreator")
+  narratedEvents    Event[]             @relation("EventNarrator")
+  registrations     EventRegistration[]
+  gamePlayers       GamePlayer[]
+  nightActions      GameAction[]        @relation("ActionActor")
+  tokens            AuthToken[]
+}
+
+model AuthToken {
+  id        String    @id @default(cuid())
+  userId    String
+  type      String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Event {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  title       String
+  titleEn     String
+  date        DateTime
+  location    String
+  locationEn  String
+  status      String   @default("registration_open")
+  narratorId  String?
+  scenarioId  String?
+  createdById String
+  createdAt   DateTime @default(now())
+
+  narrator    User?                @relation("EventNarrator", fields: [narratorId], references: [id])
+  createdBy   User                 @relation("EventCreator", fields: [createdById], references: [id])
+  scenario    Scenario?            @relation(fields: [scenarioId], references: [id])
+  registrations EventRegistration[]
+  games       Game[]
+}
+
+model EventRegistration {
+  id                String   @id @default(cuid())
+  eventId           String
+  userId            String
+  registeredAt      DateTime @default(now())
+  narratorVolunteer Boolean  @default(false)
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+}
+
+model Scenario {
+  id                   String  @id @default(cuid())
+  name                 String
+  nameEn               String
+  description          String  @default("")
+  descriptionEn        String  @default("")
+  supportedPlayerCount Int
+  configuration        String  @default("{}")
+  version              Int     @default(1)
+  active               Boolean @default(true)
+
+  roles     Role[]
+  exitCards ExitCard[]
+  events    Event[]
+}
+
+model Role {
+  id            String @id @default(cuid())
+  scenarioId    String
+  key           String
+  name          String
+  nameEn        String
+  faction       String
+  description   String
+  descriptionEn String
+  quantity      Int
+  nightOrder    Int    @default(0)
+  abilities     String @default("[]")
+
+  scenario Scenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+}
+
+model ExitCard {
+  id            String  @id @default(cuid())
+  scenarioId    String
+  key           String
+  name          String
+  nameEn        String
+  description   String
+  descriptionEn String
+  effectJson    String  @default("{}")
+  requiresTarget Boolean @default(false)
+
+  scenario Scenario       @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  draws    ExitCardDraw[]
+}
+
+model Game {
+  id                String    @id @default(cuid())
+  eventId           String
+  scenarioSnapshot  String
+  status            String    @default("ready")
+  currentDay        Int       @default(0)
+  currentPhase      String    @default("lobby")
+  nightStep         Int       @default(0)
+  speakerIndex      Int       @default(0)
+  startedAt         DateTime?
+  finishedAt        DateTime?
+  winningFaction    String?
+  createdAt         DateTime  @default(now())
+
+  event     Event          @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  players   GamePlayer[]
+  actions   GameAction[]
+  votes     Vote[]
+  draws     ExitCardDraw[]
+  effects   StatusEffect[]
+}
+
+model GamePlayer {
+  id                String    @id @default(cuid())
+  gameId            String
+  userId            String
+  seatNumber        Int
+  roleKey           String
+  roleName          String
+  roleNameEn        String
+  faction           String
+  roleDescription   String
+  roleDescriptionEn String
+  alive             Boolean   @default(true)
+  revealedAt        DateTime?
+  eliminatedAt      DateTime?
+  eliminationReason String?
+
+  game            Game           @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  actionsAsActor  GameAction[]   @relation("ActionActorPlayer")
+  actionsAsTarget GameAction[]   @relation("ActionTargetPlayer")
+  votes           Vote[]
+  draws           ExitCardDraw[]
+  effects         StatusEffect[]
+
+  @@unique([gameId, userId])
+  @@unique([gameId, seatNumber])
+}
+
+model GameAction {
+  id             String   @id @default(cuid())
+  gameId         String
+  dayNumber      Int
+  phase          String
+  actorUserId    String?
+  actorPlayerId  String?
+  targetPlayerId String?
+  actionType     String
+  message        String
+  messageEn      String
+  metadata       String   @default("{}")
+  reversed       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  game   Game        @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  actor  User?       @relation("ActionActor", fields: [actorUserId], references: [id])
+  actorPlayer GamePlayer? @relation("ActionActorPlayer", fields: [actorPlayerId], references: [id])
+  targetPlayer GamePlayer? @relation("ActionTargetPlayer", fields: [targetPlayerId], references: [id])
+}
+
+model Vote {
+  id             String @id @default(cuid())
+  gameId         String
+  dayNumber      Int
+  voteType       String
+  targetPlayerId String
+  count          Int
+
+  game   Game       @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  target GamePlayer @relation(fields: [targetPlayerId], references: [id], onDelete: Cascade)
+
+  @@unique([gameId, dayNumber, voteType, targetPlayerId])
+}
+
+model ExitCardDraw {
+  id         String   @id @default(cuid())
+  gameId     String
+  playerId   String
+  exitCardId String?
+  cardKey    String
+  cardName   String
+  cardNameEn String
+  drawNumber Int
+  drawnAt    DateTime @default(now())
+
+  game     Game      @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  player   GamePlayer @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  exitCard ExitCard? @relation(fields: [exitCardId], references: [id])
+}
+
+model StatusEffect {
+  id             String  @id @default(cuid())
+  gameId         String
+  gamePlayerId   String
+  effectType     String
+  startsAtPhase  String
+  endsAtPhase    String?
+  sourceActionId String?
+  metadata       String  @default("{}")
+
+  game   Game       @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  player GamePlayer @relation(fields: [gamePlayerId], references: [id], onDelete: Cascade)
+}
