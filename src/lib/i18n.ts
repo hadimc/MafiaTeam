@@ -102,6 +102,7 @@ export const dictionary = {
   randomize: { fa: "قرعه‌کشی", en: "Randomize" },
   red: { fa: "قرمز", en: "Red" },
   blue: { fa: "آبی", en: "Blue" },
+  green: { fa: "سبز", en: "Green" },
   exitCard: { fa: "کارت خروج", en: "Exit card" },
   draw: { fa: "بکش", en: "Draw" },
   currentStep: { fa: "مرحله فعلی", en: "Current step" },

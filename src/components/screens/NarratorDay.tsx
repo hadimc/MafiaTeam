@@ -241,8 +241,7 @@ export function NarratorDay({ game }: { game: Game }) {
               type="button"
               className="playing-card card-pattern min-h-16 rounded-xl text-sm font-semibold text-gold"
               onClick={async () => {
-                if (!lastEliminated) return;
-                const result = await drawExitCardAction(game.id, lastEliminated.id, i + 1);
+                const result = await drawExitCardAction(game.id, c.id);
                 if (result.card) setCard(result.card.nameEn || result.card.name);
               }}
             >

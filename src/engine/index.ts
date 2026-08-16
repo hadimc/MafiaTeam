@@ -93,7 +93,7 @@ export function assignRoles(playerIds: string[], roles: RoleDef[]) {
 }
 
 export function defenseThreshold(livingCount: number) {
-  return Math.ceil(livingCount / 2);
+  return Math.max(0, Math.floor(livingCount / 2) - 1);
 }
 
 export function defenseQualifiers(
@@ -101,7 +101,7 @@ export function defenseQualifiers(
   livingCount: number,
 ) {
   const threshold = defenseThreshold(livingCount);
-  return votes.filter((v) => v.count > threshold).sort((a, b) => b.count - a.count);
+  return votes.filter((v) => v.count >= threshold && v.count > 0).sort((a, b) => b.count - a.count);
 }
 
 export function eliminationResult(votes: { playerId: string; count: number }[]) {
@@ -110,6 +110,10 @@ export function eliminationResult(votes: { playerId: string; count: number }[]) 
   const top = votes.filter((v) => v.count === max);
   if (top.length === 1) return { type: "eliminate" as const, playerId: top[0].playerId };
   return { type: "tie" as const, playerIds: top.map((v) => v.playerId) };
+}
+
+export function randomBlueGreen(): "blue" | "green" {
+  return Math.random() < 0.5 ? "blue" : "green";
 }
 
 export function randomRedBlue(): "red" | "blue" {
