@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useLang } from "@/lib/lang";
+import { useLang, enName } from "@/lib/lang";
 import { Button, Panel } from "@/components/ui";
 import { NarratorNav } from "@/components/NarratorNav";
 import { defenseQualifiers, defenseThreshold } from "@/engine";
@@ -32,7 +32,7 @@ type Game = {
 };
 
 export function NarratorDay({ game }: { game: Game }) {
-  const { t, lang } = useLang();
+  const { t } = useLang();
   const living = useMemo(() => game.players.filter((p) => p.alive), [game.players]);
   const snapshot = readSnapshot(game.scenarioSnapshot);
   const [index, setIndex] = useState(game.speakerIndex);
@@ -45,8 +45,7 @@ export function NarratorDay({ game }: { game: Game }) {
 
   const speaker = living[index] ?? living[0];
   const next = living[(index + 1) % Math.max(living.length, 1)];
-  const name = (p?: Player) =>
-    !p ? "—" : lang === "en" && p.user.displayNameEn ? p.user.displayNameEn : p.user.displayName;
+  const name = (p?: Player) => (!p ? "—" : enName(p.user));
 
   useEffect(() => {
     if (!running) return;
@@ -91,17 +90,26 @@ export function NarratorDay({ game }: { game: Game }) {
   return (
     <div className="flex flex-1 flex-col gap-4">
       <header>
-        <p className="text-xs text-gold">{t("introDay")}</p>
-        <h1 className="display text-2xl">{t("currentSpeaker")}</h1>
+        <p className="text-[11px] uppercase tracking-[0.22em] text-gold">{t("introDay")}</p>
+        <h1 className="display mt-1 text-2xl font-semibold">{t("currentSpeaker")}</h1>
       </header>
 
       <Panel className="text-center">
-        {challenge ? <p className="mb-1 text-xs uppercase tracking-[0.2em] text-red-2">{t("challenge")}</p> : null}
-        <p className="display text-3xl">{name(speaker)}</p>
-        <p className="mt-4 font-mono text-6xl tabular-nums text-gold">
-          {mm}:{ss}
-        </p>
-        <p className="mt-2 text-sm text-muted">
+        {challenge ? (
+          <p className="mb-2 text-[11px] uppercase tracking-[0.22em] text-mafia">{t("challenge")}</p>
+        ) : null}
+        <p className="display text-2xl">{name(speaker)}</p>
+        <div
+          className="timer-ring mx-auto mt-5 grid h-40 w-40 place-items-center rounded-full"
+          style={{ ["--p" as string]: `${duration ? (seconds / duration) * 100 : 0}%` }}
+        >
+          <div className="grid h-[9.25rem] w-[9.25rem] place-items-center rounded-full bg-card">
+            <p className="font-mono text-4xl tabular-nums tracking-tight">
+              {mm}:{ss}
+            </p>
+          </div>
+        </div>
+        <p className="mt-4 text-sm text-muted">
           {t("nextSpeaker")}: {name(next)}
         </p>
       </Panel>
@@ -231,18 +239,18 @@ export function NarratorDay({ game }: { game: Game }) {
             <button
               key={c.key}
               type="button"
-              className="min-h-12 rounded-xl border border-line"
+              className="playing-card card-pattern min-h-16 rounded-xl text-sm font-semibold text-gold"
               onClick={async () => {
                 if (!lastEliminated) return;
                 const result = await drawExitCardAction(game.id, lastEliminated.id, i + 1);
-                if (result.card) setCard(lang === "en" ? result.card.nameEn : result.card.name);
+                if (result.card) setCard(result.card.nameEn || result.card.name);
               }}
             >
               {i + 1}
             </button>
           ))}
         </div>
-        {card ? <p className="mt-3 text-center text-gold">{card}</p> : null}
+        {card ? <p className="display mt-3 text-center text-gold">{card}</p> : null}
       </Panel>
 
       <NarratorNav current="day" />

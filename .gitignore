@@ -42,6 +42,9 @@ yarn-error.log*
 *.db
 *.db-journal
 
+# local club roster + seed password
+/prisma/club.local.json
+
 # vercel
 .vercel
 

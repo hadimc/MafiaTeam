@@ -29,7 +29,7 @@ export function SetPasswordForm({
 
   return (
     <div className="flex flex-1 flex-col justify-center gap-4">
-      <h1 className="display text-center text-3xl">{t("setPassword")}</h1>
+      <h1 className="display text-center text-3xl font-semibold">{t("setPassword")}</h1>
       <form
         action={async (formData) => {
           const result = await setPasswordWithTokenAction(kind, token, formData);

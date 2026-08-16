@@ -29,19 +29,6 @@ export async function loginAction(_prev: AuthState, formData: FormData): Promise
   redirect("/dashboard");
 }
 
-export async function loginAsAction(username: string) {
-  const user = await prisma.user.findUnique({ where: { username } });
-  if (!user || !user.enabled || !user.passwordHash) redirect("/login");
-  await setSession({
-    id: user.id,
-    username: user.username,
-    displayName: user.displayName,
-    displayNameEn: user.displayNameEn,
-    isAdmin: user.isAdmin,
-  });
-  redirect("/dashboard");
-}
-
 export async function logoutAction() {
   await clearSession();
   redirect("/login");

@@ -1,19 +1,24 @@
 import type { Metadata, Viewport } from "next";
-import { Cinzel, Vazirmatn } from "next/font/google";
+import { Cinzel, Geist, Vazirmatn } from "next/font/google";
 import { LangProvider } from "@/lib/lang";
-import { PhoneShell } from "@/components/PhoneShell";
+import { AppShell } from "@/components/AppShell";
 import { getSessionUser } from "@/lib/auth";
 import "./globals.css";
+
+const geist = Geist({
+  variable: "--font-geist",
+  subsets: ["latin"],
+});
+
+const cinzel = Cinzel({
+  variable: "--font-cinzel",
+  subsets: ["latin"],
+  weight: ["400", "600", "700"],
+});
 
 const vazir = Vazirmatn({
   variable: "--font-vazir",
   subsets: ["arabic", "latin"],
-});
-
-const cinzel = Cinzel({
-  variable: "--font-display",
-  subsets: ["latin"],
-  weight: ["500", "700"],
 });
 
 export const metadata: Metadata = {
@@ -24,16 +29,20 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#0b090c",
+  themeColor: "#0b0908",
 };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   const user = await getSessionUser();
   return (
-    <html lang="fa" dir="rtl" className={`${vazir.variable} ${cinzel.variable} h-full antialiased`}>
+    <html
+      lang="en"
+      dir="ltr"
+      className={`${geist.variable} ${cinzel.variable} ${vazir.variable} h-full antialiased`}
+    >
       <body className="min-h-full">
         <LangProvider>
-          <PhoneShell user={user}>{children}</PhoneShell>
+          <AppShell user={user}>{children}</AppShell>
         </LangProvider>
       </body>
     </html>

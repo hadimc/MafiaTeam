@@ -73,6 +73,6 @@ export async function requireAdmin() {
   return user;
 }
 
-export function locName(user: { displayName: string; displayNameEn: string }, lang: "fa" | "en") {
-  return lang === "en" && user.displayNameEn ? user.displayNameEn : user.displayName;
+export function locName(user: { displayName: string; displayNameEn: string }) {
+  return user.displayNameEn?.trim() || user.displayName;
 }

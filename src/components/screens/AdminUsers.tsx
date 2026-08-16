@@ -9,6 +9,7 @@ type UserRow = {
   username: string;
   email: string;
   displayName: string;
+  displayNameEn: string;
   isAdmin: boolean;
   enabled: boolean;
   hasPassword: boolean;
@@ -20,7 +21,7 @@ export function AdminUsers({ users }: { users: UserRow[] }) {
   return (
     <div className="flex flex-1 flex-col gap-4">
       <div className="flex items-center justify-between gap-3">
-        <h1 className="display text-2xl">{t("users")}</h1>
+        <h1 className="display text-2xl font-semibold">{t("users")}</h1>
         <Button href="/admin/users/new" className="w-auto min-h-10 px-4 text-sm">
           {t("inviteUser")}
         </Button>
@@ -36,11 +37,11 @@ export function AdminUsers({ users }: { users: UserRow[] }) {
             <Link
               key={user.id}
               href={`/admin/users/${user.id}`}
-              className="flex items-center justify-between gap-3 rounded-2xl bg-bg px-3 py-3"
+              className="flex items-center justify-between gap-3 rounded-2xl bg-bg-elev px-3 py-3"
             >
               <div className="min-w-0">
                 <p className="truncate font-medium">
-                  {user.displayName}
+                  {user.displayNameEn || user.displayName}
                   {user.isAdmin ? " ★" : ""}
                 </p>
                 <p className="truncate text-xs text-muted">{user.email}</p>

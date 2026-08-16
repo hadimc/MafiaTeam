@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { useLang } from "@/lib/lang";
-import { Button, Panel } from "@/components/ui";
+import { useLang, enName } from "@/lib/lang";
+import { Button, Panel, SeatAvatar } from "@/components/ui";
 import { NarratorNav } from "@/components/NarratorNav";
+import { nightStepLabel } from "@/lib/catalog";
 import { readSnapshot } from "@/lib/scenario";
 import { recordNightAction, setPhaseAction } from "@/server/actions/games";
 
@@ -25,7 +26,7 @@ export function NarratorNight({
     players: Player[];
   };
 }) {
-  const { t, lang } = useLang();
+  const { t } = useLang();
   const snapshot = readSnapshot(game.scenarioSnapshot);
   const order = snapshot.configuration.nightOrder;
   const stepKey = order[game.nightStep] ?? order[order.length - 1];
@@ -33,8 +34,7 @@ export function NarratorNight({
   const living = game.players.filter((p) => p.alive);
   const [target, setTarget] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
-  const name = (p: Player) =>
-    lang === "en" && p.user.displayNameEn ? p.user.displayNameEn : p.user.displayName;
+  const name = (p: Player) => enName(p.user);
 
   async function confirm() {
     if (!target) return;
@@ -46,17 +46,18 @@ export function NarratorNight({
   return (
     <div className="flex flex-1 flex-col gap-4">
       <header>
-        <p className="text-xs text-gold">
+        <p className="text-[11px] uppercase tracking-[0.22em] text-gold">
           {t("night")} · {Math.min(game.nightStep + 1, order.length)}/{order.length}
         </p>
-        <h1 className="display text-2xl">{t("currentStep")}</h1>
+        <h1 className="display mt-1 text-2xl font-semibold">{t("currentStep")}</h1>
       </header>
 
-      <Panel className="text-center">
-        <p className="display text-3xl">
-          {role ? (lang === "en" ? role.nameEn : role.name) : stepKey}
+      <Panel className="relative overflow-hidden text-center">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(88,28,135,0.18),transparent_55%)]" />
+        <p className="relative display text-3xl text-gold">
+          {role ? role.nameEn || role.name : nightStepLabel(stepKey)}
         </p>
-        <p className="mt-2 text-muted">{t("chooseTarget")}</p>
+        <p className="relative mt-2 text-sm text-muted">{t("chooseTarget")}</p>
       </Panel>
 
       <div className="grid grid-cols-2 gap-2">
@@ -68,11 +69,12 @@ export function NarratorNight({
               setTarget(player.id);
               setResult(null);
             }}
-            className={`min-h-14 rounded-2xl border px-3 text-sm ${
-              target === player.id ? "border-gold bg-gold/15 text-gold" : "border-line bg-card"
+            className={`flex min-h-16 items-center gap-3 rounded-2xl border px-3 text-start text-sm ${
+              target === player.id ? "border-gold bg-gold/10 text-gold" : "border-line bg-card"
             }`}
           >
-            {player.seatNumber}. {name(player)}
+            <SeatAvatar name={name(player)} seat={player.seatNumber} />
+            {name(player)}
           </button>
         ))}
       </div>

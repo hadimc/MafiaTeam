@@ -1,43 +1,67 @@
 "use client";
 
+import Link from "next/link";
 import { useLang } from "@/lib/lang";
 import { Button, Panel } from "@/components/ui";
 
-export function AdminScenarios({
-  scenarios,
-}: {
-  scenarios: {
-    id: string;
-    name: string;
-    nameEn: string;
-    supportedPlayerCount: number;
-    roles: { name: string; nameEn: string; quantity: number; nightOrder: number }[];
-  }[];
-}) {
-  const { t, lang } = useLang();
+type ScenarioRow = {
+  id: string;
+  name: string;
+  nameEn: string;
+  attendeeCount: number;
+  narratorCount: number;
+  supportedPlayerCount: number;
+  eventCount: number;
+  roles: { name: string; nameEn: string; quantity: number }[];
+};
+
+export function AdminScenarios({ scenarios }: { scenarios: ScenarioRow[] }) {
+  const { t } = useLang();
+  const groups = new Map<number, ScenarioRow[]>();
+  for (const scenario of scenarios) {
+    const list = groups.get(scenario.attendeeCount) ?? [];
+    list.push(scenario);
+    groups.set(scenario.attendeeCount, list);
+  }
+
   return (
     <div className="flex flex-1 flex-col gap-4">
-      <Button href="/admin" variant="ghost" className="w-auto self-start min-h-10 px-3 text-sm">
-        {t("back")}
-      </Button>
-      <h1 className="display text-2xl">{t("scenarios")}</h1>
-      {scenarios.map((scenario) => (
-        <Panel key={scenario.id} className="space-y-3">
-          <h2 className="text-lg font-semibold">
-            {lang === "en" ? scenario.nameEn : scenario.name}
-          </h2>
-          <p className="text-sm text-muted">{scenario.supportedPlayerCount}</p>
-          <ol className="space-y-2">
-            {scenario.roles
-              .slice()
-              .sort((a, b) => a.nightOrder - b.nightOrder)
-              .map((role, i) => (
-                <li key={`${role.name}-${i}`} className="rounded-xl bg-bg px-3 py-2">
-                  {role.quantity}× {lang === "en" ? role.nameEn : role.name}
-                </li>
-              ))}
-          </ol>
-        </Panel>
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="display text-2xl font-semibold">{t("scenarios")}</h1>
+        <Button href="/admin/scenarios/new" className="w-auto min-h-10 px-4 text-sm">
+          {t("newScenario")}
+        </Button>
+      </div>
+      {[...groups.entries()].map(([count, rows]) => (
+        <section key={count} className="space-y-2">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-gold">
+            {count} {t("attendees").toLowerCase()}
+          </p>
+          {rows.map((scenario) => (
+            <Link key={scenario.id} href={`/admin/scenarios/${scenario.id}`}>
+              <Panel className="space-y-2">
+                <div className="flex items-start justify-between gap-3">
+                  <h2 className="display text-base font-semibold leading-snug">
+                    {scenario.nameEn || scenario.name}
+                  </h2>
+                  {scenario.eventCount > 0 ? (
+                    <span className="shrink-0 text-[11px] text-gold">{scenario.eventCount} nights</span>
+                  ) : null}
+                </div>
+                <p className="text-xs text-muted">
+                  {scenario.narratorCount} {t("narrators").toLowerCase()} · {scenario.supportedPlayerCount}{" "}
+                  {t("players").toLowerCase()}
+                </p>
+                <p className="text-sm leading-relaxed text-ink/90">
+                  {scenario.roles
+                    .filter((role) => role.quantity > 0)
+                    .map((role) => `${role.quantity}× ${role.nameEn || role.name}`)
+                    .join(" · ")}
+                </p>
+              </Panel>
+            </Link>
+          ))}
+        </section>
       ))}
     </div>
   );

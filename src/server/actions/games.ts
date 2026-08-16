@@ -12,6 +12,7 @@ import {
   type Phase,
   type RoleDef,
 } from "@/engine";
+import { nightStepLabel } from "@/lib/catalog";
 import { getGameForNarrator, isNarrator, readSnapshot, snapshotFromScenario } from "@/lib/queries";
 
 async function narratorGame(gameId: string) {
@@ -28,6 +29,7 @@ function revalidateGame(gameId: string, slug: string) {
   revalidatePath(`/games/${gameId}/narrator/history`);
   revalidatePath(`/games/${gameId}/role`);
   revalidatePath(`/events/${slug}`);
+  revalidatePath(`/events/${slug}/players`);
   revalidatePath("/dashboard");
 }
 
@@ -38,13 +40,18 @@ export async function dealRolesAction(eventId: string) {
     include: {
       scenario: { include: { roles: true, exitCards: true } },
       registrations: true,
+      narrators: true,
       games: true,
     },
   });
   if (!event || !isNarrator(user, event)) return { error: "forbidden" };
-  if (!event.narratorId || !event.scenario) return { error: "incomplete" };
+  if (event.narrators.length < 1 || !event.scenario) return { error: "incomplete" };
+  if (event.status !== "scenario_finalized") {
+    return { error: "not_final" };
+  }
 
-  const playerRegs = event.registrations.filter((r) => r.userId !== event.narratorId);
+  const narratorSet = new Set(event.narrators.map((n) => n.userId));
+  const playerRegs = event.registrations.filter((r) => !narratorSet.has(r.userId));
   const roles: RoleDef[] = event.scenario.roles.map((role) => ({
     key: role.key,
     name: role.name,
@@ -257,6 +264,7 @@ export async function recordNightAction(gameId: string, targetPlayerId: string) 
   const snapshot = readSnapshot(game.scenarioSnapshot);
   const order = snapshot.configuration.nightOrder;
   const stepKey = order[game.nightStep] ?? "unknown";
+  const role = snapshot.roles.find((r) => r.key === stepKey);
   const target = game.players.find((p) => p.id === targetPlayerId);
   const detectiveSeesMafia =
     stepKey === "detective" && target && target.faction === "mafia" && target.roleKey !== "godfather";
@@ -267,8 +275,8 @@ export async function recordNightAction(gameId: string, targetPlayerId: string) 
     "night",
     user.id,
     stepKey,
-    `${stepKey} → ${target?.user.displayName ?? "?"}`,
-    `${stepKey} → ${target?.user.displayNameEn ?? "?"}`,
+    `${role?.name || nightStepLabel(stepKey)} → ${target?.user.displayName ?? "?"}`,
+    `${role?.nameEn || nightStepLabel(stepKey)} → ${target?.user.displayNameEn || target?.user.displayName || "?"}`,
     targetPlayerId,
     JSON.stringify({
       result: stepKey === "detective" ? (detectiveSeesMafia ? "positive" : "negative") : "recorded",

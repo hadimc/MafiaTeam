@@ -12,6 +12,7 @@ export default async function Page() {
         username: user.username,
         email: user.email,
         displayName: user.displayName,
+        displayNameEn: user.displayNameEn,
         isAdmin: user.isAdmin,
         enabled: user.enabled,
         hasPassword: Boolean(user.passwordHash),
