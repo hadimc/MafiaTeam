@@ -10,8 +10,8 @@ export function CopyLink({ url }: { url: string }) {
 
   return (
     <div className="space-y-2">
-      <p className="text-sm text-gold">{t("linkReady")}</p>
-      <p className="break-all rounded-2xl bg-bg px-3 py-2 text-xs text-muted">{url}</p>
+      <p className="text-sm font-medium">{t("linkReady")}</p>
+      <p className="break-all rounded-2xl bg-bg-elev px-3 py-2 text-xs text-muted">{url}</p>
       <Button
         variant="ghost"
         onClick={async () => {

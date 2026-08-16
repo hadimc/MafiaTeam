@@ -6,6 +6,7 @@ Mobile-first companion for organizing and narrating in-person Mafia nights.
 
 ```bash
 npm install
+cp prisma/club.local.example.json prisma/club.local.json
 npx prisma migrate dev
 npm run dev
 ```
@@ -14,18 +15,14 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ## Seed logins
 
-Password for everyone: `mafia123`
+Club members and the shared temp password live in `prisma/club.local.json` (gitignored, not pushed). Copy `prisma/club.local.example.json` and edit it, then seed:
 
-| Username / email | Role |
-| --- | --- |
-| `hadi` / `hadi@mafiateam.local` | Admin |
-| `ali` / `ali@mafiateam.local` | Player |
+```bash
+npx prisma db seed
+```
 
 Registration is invite-only. As admin, open `/admin/users` to invite people, disable accounts, or send a password-reset link. Without SMTP, copy the generated link and send it yourself.
 
-Sample event: `/events/friday-mafia-aug-21` (14 players already registered).
+Sample event: `/events/friday-mafia-aug-21`.
 
-As **hadi**, open the event and tap **توزیع نقش‌ها**. Then:
-
-- Narrator board: `/games/:id/narrator`
-- As **ali**, sign in and reveal your private role
+As narrator, open the event, finalize the scenario, then **Deal roles**. Players get a full-screen facedown card (hold to peek). The narrator board is `/games/:id/narrator`.

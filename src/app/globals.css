@@ -1,18 +1,19 @@
 @import "tailwindcss";
 
 :root {
-  --bg: #0b090c;
-  --bg-elev: #141117;
-  --card: #1b171e;
-  --line: rgba(255, 236, 220, 0.1);
-  --ink: #f6efe6;
-  --muted: #a3988d;
-  --red: #c0392b;
-  --red-2: #e74c3c;
-  --gold: #d4b06a;
-  --citizen: #7dcea0;
-  --mafia: #e74c3c;
-  --indie: #af7ac5;
+  --bg: #0b0908;
+  --bg-elev: #14110f;
+  --card: #171310;
+  --line: rgba(232, 197, 71, 0.14);
+  --ink: #f6f0e6;
+  --muted: #a89f93;
+  --red: #c41e3a;
+  --red-2: #e11d48;
+  --gold: #e8c547;
+  --gold-2: #b8922a;
+  --citizen: #34d399;
+  --mafia: #fb7185;
+  --indie: #c4b5fd;
 }
 
 @theme inline {
@@ -25,15 +26,21 @@
   --color-red: var(--red);
   --color-red-2: var(--red-2);
   --color-gold: var(--gold);
+  --color-gold-2: var(--gold-2);
   --color-citizen: var(--citizen);
   --color-mafia: var(--mafia);
   --color-indie: var(--indie);
-  --font-sans: var(--font-vazir);
-  --font-display: var(--font-display);
+  --font-sans: var(--font-geist);
+  --font-display: var(--font-cinzel);
+  --font-farsi: var(--font-vazir);
 }
 
 * {
   box-sizing: border-box;
+}
+
+html {
+  color-scheme: dark;
 }
 
 html,
@@ -44,26 +51,44 @@ body {
 }
 
 body {
-  font-family: var(--font-vazir), system-ui, sans-serif;
+  font-family: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
   background:
-    radial-gradient(1200px 600px at 50% -10%, rgba(192, 57, 43, 0.18), transparent 55%),
-    radial-gradient(800px 400px at 100% 100%, rgba(212, 176, 106, 0.08), transparent 50%),
+    radial-gradient(1200px 520px at 50% -8%, rgba(196, 30, 58, 0.22), transparent 58%),
+    radial-gradient(900px 420px at 100% 110%, rgba(232, 197, 71, 0.08), transparent 52%),
+    radial-gradient(700px 320px at 0% 80%, rgba(52, 211, 153, 0.05), transparent 50%),
     var(--bg);
 }
 
+body::before {
+  content: "";
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  opacity: 0.045;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
 .display {
-  font-family: var(--font-display), var(--font-vazir), serif;
-  letter-spacing: 0.02em;
+  font-family: var(--font-cinzel), ui-serif, Georgia, serif;
+  letter-spacing: 0.06em;
+}
+
+.farsi {
+  font-family: var(--font-vazir), var(--font-geist), sans-serif;
 }
 
 .card-3d {
   transform-style: preserve-3d;
-  transition: transform 0.7s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: transform 0.75s cubic-bezier(0.2, 0.8, 0.2, 1);
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .card-3d.flipped {
@@ -76,4 +101,24 @@ input {
 
 .card-back {
   transform: rotateY(180deg);
+}
+
+.playing-card {
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.55),
+    inset 0 0 0 1px rgba(232, 197, 71, 0.45),
+    inset 0 0 0 8px #120e0b,
+    inset 0 0 0 9px rgba(232, 197, 71, 0.28);
+}
+
+.card-pattern {
+  background-color: #3b0d14;
+  background-image:
+    repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(232, 197, 71, 0.07) 10px, rgba(232, 197, 71, 0.07) 11px),
+    repeating-linear-gradient(-45deg, transparent, transparent 10px, rgba(0, 0, 0, 0.18) 10px, rgba(0, 0, 0, 0.18) 11px),
+    radial-gradient(circle at 50% 50%, #5a1520, #2a0a0f 70%);
+}
+
+.timer-ring {
+  background: conic-gradient(var(--gold) var(--p), rgba(232, 197, 71, 0.12) 0);
 }

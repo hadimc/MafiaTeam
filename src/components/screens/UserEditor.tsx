@@ -18,6 +18,7 @@ type User = {
   username: string;
   email: string;
   displayName: string;
+  displayNameEn: string;
   isAdmin: boolean;
   enabled: boolean;
   hasPassword: boolean;
@@ -43,7 +44,7 @@ export function UserEditor({ user }: { user: User }) {
       <Button href="/admin/users" variant="ghost" className="w-auto self-start min-h-10 px-3 text-sm">
         {t("back")}
       </Button>
-      <h1 className="display text-2xl">{user.displayName}</h1>
+      <h1 className="display text-2xl font-semibold">{user.displayNameEn || user.displayName}</h1>
       <p className="text-sm text-muted">@{user.username}</p>
 
       <form
@@ -55,7 +56,7 @@ export function UserEditor({ user }: { user: User }) {
       >
         <Panel className="space-y-3">
           <label className="text-sm text-muted">{t("name")}</label>
-          <input name="displayName" defaultValue={user.displayName} required className={fieldClass} />
+          <input name="displayName" defaultValue={user.displayNameEn || user.displayName} required className={fieldClass} />
           <label className="text-sm text-muted">{t("email")}</label>
           <input name="email" type="email" defaultValue={user.email} required className={fieldClass} />
           <label className="text-sm text-muted">{t("newPassword")}</label>

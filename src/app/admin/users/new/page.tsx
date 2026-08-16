@@ -29,7 +29,7 @@ export default function InviteUserPage() {
       <Button href="/admin/users" variant="ghost" className="w-auto self-start min-h-10 px-3 text-sm">
         {t("back")}
       </Button>
-      <h1 className="display text-2xl">{t("inviteUser")}</h1>
+      <h1 className="display text-2xl font-semibold">{t("inviteUser")}</h1>
       <form action={submit}>
         <Panel className="space-y-3">
           <label className="text-sm text-muted">{t("name")}</label>

@@ -19,7 +19,7 @@ model User {
   createdAt      DateTime  @default(now())
 
   createdEvents     Event[]             @relation("EventCreator")
-  narratedEvents    Event[]             @relation("EventNarrator")
+  narrations        EventNarrator[]
   registrations     EventRegistration[]
   gamePlayers       GamePlayer[]
   nightActions      GameAction[]        @relation("ActionActor")
@@ -47,16 +47,26 @@ model Event {
   location    String
   locationEn  String
   status      String   @default("registration_open")
-  narratorId  String?
   scenarioId  String?
   createdById String
   createdAt   DateTime @default(now())
 
-  narrator    User?                @relation("EventNarrator", fields: [narratorId], references: [id])
-  createdBy   User                 @relation("EventCreator", fields: [createdById], references: [id])
-  scenario    Scenario?            @relation(fields: [scenarioId], references: [id])
+  createdBy     User                 @relation("EventCreator", fields: [createdById], references: [id])
+  scenario      Scenario?            @relation(fields: [scenarioId], references: [id])
+  narrators     EventNarrator[]
   registrations EventRegistration[]
-  games       Game[]
+  games         Game[]
+}
+
+model EventNarrator {
+  eventId   String
+  userId    String
+  createdAt DateTime @default(now())
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([eventId, userId])
 }
 
 model EventRegistration {
@@ -75,9 +85,11 @@ model EventRegistration {
 model Scenario {
   id                   String  @id @default(cuid())
   name                 String
-  nameEn               String
+  nameEn               String  @unique
   description          String  @default("")
   descriptionEn        String  @default("")
+  attendeeCount        Int
+  narratorCount        Int     @default(1)
   supportedPlayerCount Int
   configuration        String  @default("{}")
   version              Int     @default(1)
@@ -232,4 +244,14 @@ model StatusEffect {
 
   game   Game       @relation(fields: [gameId], references: [id], onDelete: Cascade)
   player GamePlayer @relation(fields: [gamePlayerId], references: [id], onDelete: Cascade)
+}
+
+model HouseRule {
+  id        String   @id @default(cuid())
+  title     String
+  titleEn   String
+  body      String   @default("")
+  bodyEn    String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
 }

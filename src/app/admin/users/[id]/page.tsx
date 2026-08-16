@@ -15,6 +15,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
         username: user.username,
         email: user.email,
         displayName: user.displayName,
+        displayNameEn: user.displayNameEn,
         isAdmin: user.isAdmin,
         enabled: user.enabled,
         hasPassword: Boolean(user.passwordHash),

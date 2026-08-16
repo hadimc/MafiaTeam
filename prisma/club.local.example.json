@@ -1,0 +1,17 @@
+{
+  "password": "ChangeMe123",
+  "users": [
+    {
+      "username": "hadi",
+      "displayName": "هادی",
+      "displayNameEn": "Hadi",
+      "admin": true
+    },
+    {
+      "username": "ali",
+      "displayName": "علی",
+      "displayNameEn": "Ali",
+      "admin": false
+    }
+  ]
+}
