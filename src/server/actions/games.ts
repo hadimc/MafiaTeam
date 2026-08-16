@@ -7,13 +7,13 @@ import {
   assignRoles,
   canTransition,
   parseConfig,
-  randomRedBlue,
   type Faction,
   type Phase,
   type RoleDef,
 } from "@/engine";
 import { nightStepLabel } from "@/lib/catalog";
 import { getGameForNarrator, isNarrator, readSnapshot, snapshotFromScenario } from "@/lib/queries";
+import { activeJackCurse, jackCurseRound } from "@/lib/stages";
 
 async function narratorGame(gameId: string) {
   const user = await requireUser();
@@ -118,17 +118,151 @@ export async function dealRolesAction(eventId: string) {
 
 export async function startGameAction(gameId: string) {
   const { user, game } = await narratorGame(gameId);
-  if (game.currentPhase !== "lobby") return { error: "phase" };
+  if (game.currentPhase !== "lobby" && game.status === "in_progress") return;
   await prisma.game.update({
     where: { id: gameId },
     data: {
       status: "in_progress",
-      currentPhase: "intro_day",
-      startedAt: new Date(),
+      currentPhase: game.currentPhase === "lobby" ? "intro_day" : game.currentPhase,
+      currentDay: game.currentPhase === "lobby" ? 0 : game.currentDay,
+      startedAt: game.startedAt ?? new Date(),
     },
   });
   await prisma.event.update({ where: { id: game.eventId }, data: { status: "in_progress" } });
-  await log(gameId, 0, "intro_day", user.id, "start", "بازی شروع شد", "Game started");
+  if (game.currentPhase === "lobby") {
+    await log(gameId, 0, "intro_day", user.id, "start", "بازی شروع شد", "Game started");
+  }
+  revalidateGame(gameId, game.event.slug);
+}
+
+export async function setStageAction(
+  gameId: string,
+  data: { currentDay: number; currentPhase: string; nightStep: number; speakerIndex?: number },
+) {
+  const { user, game } = await narratorGame(gameId);
+  if (game.currentPhase === "lobby") {
+    await startGameAction(gameId);
+  }
+  await prisma.game.update({
+    where: { id: gameId },
+    data: {
+      status: "in_progress",
+      currentDay: data.currentDay,
+      currentPhase: data.currentPhase,
+      nightStep: data.nightStep,
+      speakerIndex: data.speakerIndex ?? 0,
+    },
+  });
+  await log(
+    gameId,
+    data.currentDay,
+    data.currentPhase,
+    user.id,
+    "stage",
+    `مرحله: ${data.currentPhase} ${data.currentDay}`,
+    `Stage: ${data.currentPhase} ${data.currentDay}`,
+  );
+  revalidateGame(gameId, game.event.slug);
+}
+
+export async function recordJackCurseAction(gameId: string, targetPlayerId: string) {
+  const { user, game } = await narratorGame(gameId);
+  const jack = game.players.find((player) => player.roleKey === "jack" && player.alive);
+  const target = game.players.find((player) => player.id === targetPlayerId);
+  if (!jack) return { error: "no_jack" };
+  if (!target || !target.alive) return { error: "not_found" };
+  if (target.id === jack.id) return { error: "self" };
+  const shown = game.actions.some(
+    (action) => action.actionType === "shown" && action.targetPlayerId === jack.id,
+  );
+  if (shown) return { error: "frozen" };
+
+  const round = jackCurseRound(
+    game.actions,
+    game.players.filter((player) => player.alive),
+    game.currentDay,
+  );
+  if (!round.eligibleIds.includes(targetPlayerId)) return { error: "repeat" };
+
+  const targetName = target.user.displayNameEn || target.user.displayName;
+  await log(
+    gameId,
+    game.currentDay,
+    game.currentPhase,
+    user.id,
+    "jack",
+    `طلسم جک: ${target.user.displayName}`,
+    `Jack curse → ${targetName}`,
+    targetPlayerId,
+  );
+  revalidateGame(gameId, game.event.slug);
+}
+
+export async function recordStageAction(
+  gameId: string,
+  actionType: string,
+  messageEn: string,
+  targetPlayerId?: string,
+) {
+  const { user, game } = await narratorGame(gameId);
+  await log(
+    gameId,
+    game.currentDay,
+    game.currentPhase,
+    user.id,
+    actionType,
+    messageEn,
+    messageEn,
+    targetPlayerId,
+  );
+  if (actionType === "constantine" && targetPlayerId) {
+    await prisma.gamePlayer.update({
+      where: { id: targetPlayerId },
+      data: { alive: true, eliminatedAt: null, eliminationReason: null },
+    });
+  }
+  revalidateGame(gameId, game.event.slug);
+}
+
+export async function swapRolesAction(gameId: string, fromPlayerId: string, toPlayerId: string) {
+  const { user, game } = await narratorGame(gameId);
+  const from = game.players.find((player) => player.id === fromPlayerId);
+  const to = game.players.find((player) => player.id === toPlayerId);
+  if (!from || !to) return { error: "not_found" };
+  await prisma.$transaction([
+    prisma.gamePlayer.update({
+      where: { id: from.id },
+      data: {
+        roleKey: to.roleKey,
+        roleName: to.roleName,
+        roleNameEn: to.roleNameEn,
+        faction: to.faction,
+        roleDescription: to.roleDescription,
+        roleDescriptionEn: to.roleDescriptionEn,
+      },
+    }),
+    prisma.gamePlayer.update({
+      where: { id: to.id },
+      data: {
+        roleKey: from.roleKey,
+        roleName: from.roleName,
+        roleNameEn: from.roleNameEn,
+        faction: from.faction,
+        roleDescription: from.roleDescription,
+        roleDescriptionEn: from.roleDescriptionEn,
+      },
+    }),
+  ]);
+  await log(
+    gameId,
+    game.currentDay,
+    game.currentPhase,
+    user.id,
+    "faceChange",
+    `تغییر چهره: ${from.user.displayName} ↔ ${to.user.displayName}`,
+    `Face change: ${from.user.displayNameEn || from.user.displayName} ↔ ${to.user.displayNameEn || to.user.displayName}`,
+    to.id,
+  );
   revalidateGame(gameId, game.event.slug);
 }
 
@@ -186,7 +320,7 @@ export async function setVoteAction(
 export async function eliminatePlayerAction(gameId: string, playerId: string, reason: string) {
   const { user, game } = await narratorGame(gameId);
   const player = game.players.find((p) => p.id === playerId);
-  if (!player) return { error: "not_found" };
+  if (!player || !player.alive) return { error: "not_found" };
   await prisma.gamePlayer.update({
     where: { id: playerId },
     data: { alive: false, eliminatedAt: new Date(), eliminationReason: reason },
@@ -201,15 +335,37 @@ export async function eliminatePlayerAction(gameId: string, playerId: string, re
     `${player.user.displayNameEn || player.user.displayName} eliminated`,
     playerId,
   );
-  await prisma.game.update({ where: { id: gameId }, data: { currentPhase: "exit_card" } });
+
+  const curse = activeJackCurse(game.actions);
+  const jack = game.players.find((item) => item.roleKey === "jack" && item.alive && item.id !== playerId);
+  if (curse?.playerId === playerId && jack) {
+    await prisma.gamePlayer.update({
+      where: { id: jack.id },
+      data: { alive: false, eliminatedAt: new Date(), eliminationReason: "jack_curse" },
+    });
+    const cursedName = player.user.displayNameEn || player.user.displayName;
+    const jackName = jack.user.displayNameEn || jack.user.displayName;
+    await log(
+      gameId,
+      game.currentDay,
+      game.currentPhase,
+      user.id,
+      "jackOut",
+      `طلسم جک با ${player.user.displayName} از بازی خارج شد — جک هم حذف شد`,
+      `Jack’s curse left with ${cursedName}. Jack is out.`,
+      jack.id,
+    );
+    revalidateGame(gameId, game.event.slug);
+    return { jackOut: { jackName, cursedName } };
+  }
+
   revalidateGame(gameId, game.event.slug);
 }
 
-export async function drawExitCardAction(gameId: string, playerId: string, drawNumber: number) {
+export async function drawExitCardAction(gameId: string, cardId: string) {
   const { user, game } = await narratorGame(gameId);
   const snapshot = readSnapshot(game.scenarioSnapshot);
-  const remaining = snapshot.exitCards.filter((c) => !c.used);
-  const card = remaining[drawNumber - 1] ?? remaining[0];
+  const card = snapshot.exitCards.find((item) => item.id === cardId && !item.used);
   if (!card) return { error: "empty" };
 
   card.used = true;
@@ -217,46 +373,38 @@ export async function drawExitCardAction(gameId: string, playerId: string, drawN
     where: { id: gameId },
     data: { scenarioSnapshot: JSON.stringify(snapshot) },
   });
-  await prisma.exitCardDraw.create({
-    data: {
-      gameId,
-      playerId,
-      exitCardId: card.id,
-      cardKey: card.key,
-      cardName: card.name,
-      cardNameEn: card.nameEn,
-      drawNumber,
-    },
-  });
   await log(
     gameId,
     game.currentDay,
-    "exit_card",
+    game.currentPhase,
     user.id,
     "exit_card",
     `کارت خروج: ${card.name}`,
     `Exit card: ${card.nameEn}`,
-    playerId,
-    JSON.stringify({ key: card.key, drawNumber }),
+    undefined,
+    JSON.stringify({ key: card.key, id: card.id }),
   );
   revalidateGame(gameId, game.event.slug);
   return { card };
 }
 
-export async function randomizeTieAction(gameId: string) {
+export async function recordLotteryAction(gameId: string, color: "blue" | "green") {
   const { user, game } = await narratorGame(gameId);
-  const color = randomRedBlue();
   await log(
     gameId,
     game.currentDay,
-    "tie_break",
+    game.currentPhase,
     user.id,
     "tie",
-    color === "red" ? "قرعه: قرمز" : "قرعه: آبی",
-    color === "red" ? "Draw: Red" : "Draw: Blue",
+    color === "green" ? "قرعه: سبز" : "قرعه: آبی",
+    color === "green" ? "Draw: Green" : "Draw: Blue",
   );
   revalidateGame(gameId, game.event.slug);
   return { color };
+}
+
+export async function randomizeTieAction(gameId: string) {
+  return recordLotteryAction(gameId, Math.random() < 0.5 ? "blue" : "green");
 }
 
 export async function recordNightAction(gameId: string, targetPlayerId: string) {
