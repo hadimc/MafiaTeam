@@ -111,6 +111,7 @@ export function EventView({
   const [scenarioId, setScenarioId] = useState(event.scenarioId ?? "");
   const [qty, setQty] = useState(() => qtyFrom(scenarios.find((s) => s.id === event.scenarioId)));
   const [cardOpen, setCardOpen] = useState(false);
+  const [warnReset, setWarnReset] = useState(false);
   const shownCard = useRef<string | null>(null);
 
   const pull = useCallback((seen: string) => pullEventAction(event.id, seen), [event.id]);
@@ -194,6 +195,7 @@ export function EventView({
 
   async function reopen() {
     setError(null);
+    setWarnReset(false);
     await reopenScenarioAction(event.id);
     router.refresh();
   }
@@ -408,9 +410,24 @@ export function EventView({
       ) : null}
 
       {amNarrator && canReopenScenario(event.status) && !canDeal(event.status) ? (
-        <Button onClick={reopen} variant="ghost">
-          {dealtCards ? t("stopGame") : t("reopenScenario")}
-        </Button>
+        dealtCards && warnReset ? (
+          <Panel className="space-y-3">
+            <p className="text-sm text-muted">{t("resetGameWarn")}</p>
+            <Button onClick={reopen} variant="danger">
+              {t("yesResetGame")}
+            </Button>
+            <Button onClick={() => setWarnReset(false)} variant="ghost">
+              {t("cancel")}
+            </Button>
+          </Panel>
+        ) : (
+          <Button
+            onClick={dealtCards ? () => setWarnReset(true) : reopen}
+            variant="ghost"
+          >
+            {dealtCards ? t("resetGame") : t("reopenScenario")}
+          </Button>
+        )
       ) : null}
 
       {mine && !amNarrator && !cardOpen ? (

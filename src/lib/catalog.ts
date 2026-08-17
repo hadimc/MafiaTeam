@@ -406,7 +406,7 @@ export const HOUSE_RULES = [
   },
   {
     titleEn: "Exit cards",
-    bodyEn: "A player eliminated by day vote draws a remaining exit card (Beautiful Mind, Silence of the Lambs, Handcuffs, Reveal, Face Change).",
+    bodyEn: "A player eliminated by day vote draws a remaining exit card (Beautiful Mind, Silence of the Lambs, Handcuffs, Reveal, Face-off).",
     title: "کارت خروج",
     body: "خارج‌شونده رأی روز از کارت‌های خروج مانده کارت می‌کشد.",
   },
@@ -417,7 +417,7 @@ export const EXIT_CARDS = [
   ["silence", "سکوت بره‌ها", "Silence of the Lambs", "دو نفر را برای روز بعد ساکت می‌کند.", "Silences two players for the next day."],
   ["handcuffs", "دستبند", "Handcuffs", "توانایی یک نفر را برای امشب می‌گیرد.", "Blocks one player’s night ability."],
   ["reveal", "افشای نقش", "Reveal role", "خارج‌شونده باید نقش دقیق خود را بگوید.", "Must announce their exact role."],
-  ["face", "تغییر چهره", "Face change", "کارت خود را مخفیانه با یک حاضر عوض می‌کند.", "Secretly swaps cards with another living player."],
+  ["face", "تغییر چهره", "Face-off", "کارت خود را مخفیانه با یک حاضر عوض می‌کند.", "Secretly swaps cards with another living player."],
 ] as const;
 
 export function roleCreates(qty: Record<string, number>) {

@@ -14,7 +14,7 @@ const DAY_TASKS: StageTask[] = [
     nameEn: "Night briefing",
     nameFa: "شرح نتایج شب",
     summaryEn: "Last night’s report: who must leave, and who returns.",
-    notesEn: "From day 2. Announce, then mark leavers in Remove players.",
+    notesEn: "From day 2. Last night already updated the seats. Announce the result.",
   },
   {
     key: "inquiry",
@@ -25,17 +25,10 @@ const DAY_TASKS: StageTask[] = [
   },
   {
     key: "speak",
-    nameEn: "Speaking",
-    nameFa: "صحبت",
-    summaryEn: "Each living player speaks in turn. Use the 1-minute timer.",
-    notesEn: "From intro day.",
-  },
-  {
-    key: "challenge",
-    nameEn: "Challenge",
-    nameFa: "چالش",
-    summaryEn: "Optional interrupt during speaking. Use the 30-second timer.",
-    notesEn: "From day 1. Optional. Max one challenge per person per day.",
+    nameEn: "Speaking & Challenge",
+    nameFa: "صحبت و چالش",
+    summaryEn: "Each living player speaks in turn. Use the 1-minute timer. Optional 30-second challenge during a speech.",
+    notesEn: "Challenge from day 1. Max one given and one received per person per day.",
   },
   {
     key: "dayShot",
@@ -90,18 +83,18 @@ const DAY_TASKS: StageTask[] = [
     key: "removePlayers",
     nameEn: "Remove players",
     nameFa: "حذف بازیکن",
-    summaryEn: "Tap everyone who leaves this round — vote, shot, lottery, or last night.",
-    notesEn: "Recording step.",
+    summaryEn: "Tap everyone who leaves from the day vote, lottery, or a day shot.",
+    notesEn: "Last night’s leavers were already removed when that night ended.",
   },
 ];
 
 const NIGHT_TASKS: StageTask[] = [
   {
     key: "faceChange",
-    nameEn: "Face change",
+    nameEn: "Face-off",
     nameFa: "تغییر چهره",
-    summaryEn: "An eliminated player may secretly swap their card with someone still seated.",
-    notesEn: "Town↔town, town↔mafia, or mafia↔town. Jack’s curse stays on the person, not the card.",
+    summaryEn: "One Face-off only: pick one player outside and one player inside. Their roles swap.",
+    notesEn: "Outside = eliminated. Inside = still seated. Jack’s curse stays on the person, not the card.",
   },
   {
     key: "nostradamus",
@@ -121,20 +114,27 @@ const NIGHT_TASKS: StageTask[] = [
     key: "mafia",
     nameEn: "Mafia",
     nameFa: "عملیات مافیا",
-    summaryEn: "Shot or sixth sense (Godfather), buy (Saul), save (Lecter), block (Matador).",
-    notesEn: "From night 1. Night 0 is likes only.",
+    summaryEn: "Say the full list. Main action is one of: shot, sixth sense, or purchase. Then Lecter save and Matador block.",
+    notesEn: "Night 1+. Recite everything so the table hears no extra info. Tap again to correct a target. Nobody leaves until the night ends.",
   },
   {
     key: "town",
     nameEn: "Town",
     nameFa: "عملیات شهر",
-    summaryEn: "Save (Watson), shot (Leon), mark or inquiry (Kane / Detective), spirit (Constantine), give gun (Gunner).",
-    notesEn: "From night 1. Night 0 is thumbs-up only.",
+    summaryEn: "Say the full town list. Record Watson’s save and Leon’s shot when they act.",
+    notesEn: "Night 1+. Watson may self-save once. Tap a different name to correct a mistake. Removals wait until you go to the next day.",
+  },
+  {
+    key: "nightEnd",
+    nameEn: "Night result",
+    nameFa: "نتیجه شب",
+    summaryEn: "Nobody is removed until you tap Next. Check who would leave or return, then end the night.",
+    notesEn: "Watson save beats the Mafia shot. Lecter save beats Leon. You can still go back into Mafia or Town and change a target.",
   },
 ];
 
 const MAFIA_LIKE_ORDER = ["godfather", "saul", "lecter", "matador", "mafioso"];
-const TOWN_LIKE_ORDER = ["watson", "leon", "kane", "detective", "constantine", "gunner"];
+const TOWN_LIKE_ORDER = ["watson", "leon", "kane", "detective", "constantine", "gunner", "villager"];
 
 export function stageFromGame(game: { currentDay: number; currentPhase: string; status: string }): Stage {
   const phase = game.currentPhase;
@@ -200,15 +200,18 @@ export function nightTasks(stage: Stage, livingRoles: string[], hasDead: boolean
   const living = new Set(livingRoles);
   const dealt = new Set(dealtRoles);
   return NIGHT_TASKS.filter((task) => {
-    if (task.key === "faceChange") return hasDead;
+    if (task.key === "faceChange") return stage.n >= 1 && hasDead;
     if (task.key === "nostradamus") return stage.n === 0 && living.has("nostradamus");
     if (task.key === "jack") return dealt.has("jack");
     if (task.key === "mafia") {
+      if (stage.n >= 1) return true;
       return MAFIA_LIKE_ORDER.some((key) => living.has(key));
     }
     if (task.key === "town") {
+      if (stage.n >= 1) return true;
       return TOWN_LIKE_ORDER.some((key) => living.has(key));
     }
+    if (task.key === "nightEnd") return stage.n >= 1;
     return true;
   });
 }
@@ -291,35 +294,175 @@ export function jackCurseRound(
   return { ...history, eligibleIds: eligible, round, newRound: awaitingNewRound };
 }
 
-const NIGHT_KILL = new Set(["godfather", "leon"]);
-const NIGHT_SAVE = new Set(["watson", "lecter"]);
+const NIGHT_PHASES = new Set(["night", "intro_night", "night_resolution"]);
+const NIGHT_IMMUNE = new Set(["jack", "nostradamus"]);
+const MAFIA_MAIN = ["mafiaShot", "sixthSense", "saul"] as const;
+export const NIGHT_REPLACEABLE = [
+  ...MAFIA_MAIN,
+  "lecter",
+  "matador",
+  "watson",
+  "leon",
+  "kane",
+  "detective",
+  "constantine",
+  "gunner",
+] as const;
+
+export type NightPickAction = {
+  actionType: string;
+  dayNumber: number;
+  phase?: string | null;
+  targetPlayerId?: string | null;
+};
+
+export type NightPlayer = {
+  id: string;
+  roleKey: string;
+  faction: string;
+  alive?: boolean;
+};
+
+export function tonightPicks(actions: NightPickAction[], dayNumber: number) {
+  const picks = new Map<string, string>();
+  for (const action of actions) {
+    if (action.dayNumber !== dayNumber) continue;
+    if (action.phase && !NIGHT_PHASES.has(action.phase)) continue;
+    if (!action.targetPlayerId) continue;
+    picks.set(action.actionType, action.targetPlayerId);
+  }
+  return picks;
+}
+
+export function tonightTarget(actions: NightPickAction[], dayNumber: number, actionType: string) {
+  return tonightPicks(actions, dayNumber).get(actionType) ?? null;
+}
+
+export function resolveNight(
+  actions: NightPickAction[],
+  players: NightPlayer[],
+  nightNumber: number,
+) {
+  if (nightNumber < 1) {
+    return { leaveIds: [] as string[], returnIds: [] as string[], shieldBreakIds: [] as string[], notes: [] as string[] };
+  }
+
+  const picks = tonightPicks(actions, nightNumber);
+  const byId = new Map(players.map((player) => [player.id, player]));
+  const blockedId = picks.get("matador");
+  const blockedRole = blockedId ? byId.get(blockedId)?.roleKey ?? null : null;
+  const ability = (role: string, key: string) => (blockedRole === role ? undefined : picks.get(key));
+
+  const watsonSave = ability("watson", "watson");
+  const lecterSave = ability("lecter", "lecter");
+  const leonTargetId = ability("leon", "leon");
+  const constantineId = ability("constantine", "constantine");
+  const mafiaShotId = blockedRole === "godfather" ? undefined : picks.get("mafiaShot");
+  const sixthId = blockedRole === "godfather" ? undefined : picks.get("sixthSense");
+
+  const leave = new Set<string>();
+  const shieldBreakIds: string[] = [];
+  const notes: string[] = [];
+  const immune = (player: NightPlayer) => NIGHT_IMMUNE.has(player.roleKey);
+
+  if (mafiaShotId) {
+    const target = byId.get(mafiaShotId);
+    if (target) {
+      if (immune(target)) {
+        notes.push("Night-immune. The mafia shot does nothing.");
+      } else if (watsonSave === target.id) {
+        notes.push("Watson saved the mafia-shot target.");
+      } else if (target.roleKey === "leon" && hasShield(actions, target.id, nightNumber)) {
+        shieldBreakIds.push(target.id);
+        notes.push("Leon’s vest absorbed the mafia shot.");
+      } else {
+        leave.add(target.id);
+      }
+    }
+  }
+
+  if (sixthId) {
+    const target = byId.get(sixthId);
+    if (target && target.faction === "independent" && !immune(target)) {
+      leave.add(target.id);
+    }
+  }
+
+  const leon = players.find((player) => player.roleKey === "leon");
+  if (leonTargetId && leon) {
+    const target = byId.get(leonTargetId);
+    if (target) {
+      if (immune(target)) {
+        notes.push("Night-immune. Leon’s shot does nothing.");
+      } else if (target.faction === "citizen") {
+        leave.add(leon.id);
+        notes.push("Citizen hit. Leon is out.");
+      } else if (
+        (target.roleKey === "godfather" || target.roleKey === "zodiac") &&
+        hasShield(actions, target.id, nightNumber)
+      ) {
+        shieldBreakIds.push(target.id);
+        notes.push("Shield broken.");
+      } else if (target.faction === "mafia" || target.roleKey === "zodiac") {
+        if (lecterSave === target.id) {
+          notes.push("Lecter saved the Leon target.");
+        } else {
+          leave.add(target.id);
+        }
+      }
+    }
+  }
+
+  const curse = activeJackCurse(actions);
+  if (curse && leave.has(curse.playerId)) {
+    const jackPlayer = players.find((player) => player.roleKey === "jack");
+    if (jackPlayer && jackPlayer.id !== curse.playerId) leave.add(jackPlayer.id);
+  }
+
+  const returnIds = constantineId ? [constantineId] : [];
+  return {
+    leaveIds: [...leave],
+    returnIds,
+    shieldBreakIds: [...new Set(shieldBreakIds)],
+    notes,
+  };
+}
 
 export function lastNightReport(
-  actions: { actionType: string; dayNumber: number; phase?: string | null; targetPlayerId?: string | null }[],
+  actions: NightPickAction[],
   dayNumber: number,
-  players: { id: string; roleKey: string }[],
+  players: NightPlayer[],
 ) {
-  const nightDay = dayNumber - 1;
-  const latest = new Map<string, string>();
-  for (const action of actions) {
-    if (action.dayNumber !== nightDay || !action.targetPlayerId) continue;
-    if (action.phase && action.phase !== "night" && action.phase !== "intro_night" && action.phase !== "night_resolution") {
-      continue;
-    }
-    latest.set(action.actionType, action.targetPlayerId);
-  }
-  const saved = new Set(
-    [...latest.entries()].filter(([type]) => NIGHT_SAVE.has(type)).map(([, id]) => id),
+  const result = resolveNight(actions, players, dayNumber - 1);
+  return { leaveIds: result.leaveIds, returnIds: result.returnIds };
+}
+
+export function hasShield(
+  actions: { actionType: string; dayNumber?: number; targetPlayerId?: string | null }[],
+  playerId: string,
+  nightNumber?: number,
+) {
+  return !actions.some((action) => {
+    if (action.actionType !== "shieldBreak" || action.targetPlayerId !== playerId) return false;
+    if (nightNumber != null && action.dayNumber === nightNumber) return false;
+    return true;
+  });
+}
+
+export function watsonSelfSaved(
+  actions: { actionType: string; targetPlayerId?: string | null }[],
+  watsonId: string,
+) {
+  return actions.some((action) => action.actionType === "watson" && action.targetPlayerId === watsonId);
+}
+
+export function mafiaMainTonight(
+  actions: { actionType: string; dayNumber: number }[],
+  dayNumber: number,
+) {
+  return actions.find(
+    (action) =>
+      action.dayNumber === dayNumber &&
+      (action.actionType === "mafiaShot" || action.actionType === "sixthSense" || action.actionType === "saul"),
   );
-  const jackId = players.find((player) => player.roleKey === "jack")?.id;
-  const leaveIds = [
-    ...new Set(
-      [...latest.entries()]
-        .filter(([type]) => NIGHT_KILL.has(type))
-        .map(([, id]) => id)
-        .filter((id) => id !== jackId && !saved.has(id)),
-    ),
-  ];
-  const returnIds = latest.get("constantine") ? [latest.get("constantine") as string] : [];
-  return { leaveIds, returnIds };
 }

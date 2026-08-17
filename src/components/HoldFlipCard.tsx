@@ -1,6 +1,8 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { Button } from "@/components/ui";
+import { useLang } from "@/lib/lang";
 
 const HOLD_MS = 800;
 
@@ -91,15 +93,12 @@ export function CardShowShell({
   onClose: () => void;
   children: React.ReactNode;
 }) {
+  const { t } = useLang();
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-bg px-5 py-6">
-      <button
-        type="button"
-        onClick={onClose}
-        className="flex min-h-10 w-auto self-start items-center rounded-2xl border border-line bg-card/80 px-3 text-sm"
-      >
-        Close
-      </button>
+      <Button onClick={onClose} variant="ghost" className="w-auto self-start min-h-10 px-3 text-sm">
+        {t("back")}
+      </Button>
       <p className="mt-4 text-center text-[11px] uppercase tracking-[0.28em] text-gold">{title}</p>
       <div className="flex flex-1 flex-col items-center justify-center gap-5">{children}</div>
     </div>

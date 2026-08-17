@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import {
@@ -13,7 +14,7 @@ import {
 } from "@/engine";
 import { nightStepLabel } from "@/lib/catalog";
 import { getGameForNarrator, isNarrator, readSnapshot, snapshotFromScenario } from "@/lib/queries";
-import { activeJackCurse, jackCurseRound } from "@/lib/stages";
+import { activeJackCurse, jackCurseRound, NIGHT_REPLACEABLE, resolveNight, stageFromGame } from "@/lib/stages";
 
 async function narratorGame(gameId: string) {
   const user = await requireUser();
@@ -143,6 +144,17 @@ export async function setStageAction(
   if (game.currentPhase === "lobby") {
     await startGameAction(gameId);
   }
+  const from = stageFromGame(game);
+  const to = stageFromGame({ ...game, ...data });
+  let jackOut: { jackName: string; cursedName: string } | undefined;
+
+  if (from.kind === "night" && from.n >= 1 && to.kind === "day" && to.n === from.n + 1) {
+    jackOut = await applyNightResolution(gameId, from.n);
+  }
+  if (from.kind === "day" && to.kind === "night" && to.n >= 1 && to.n === from.n - 1) {
+    await undoNightResolution(gameId, to.n);
+  }
+
   await prisma.game.update({
     where: { id: gameId },
     data: {
@@ -163,6 +175,85 @@ export async function setStageAction(
     `Stage: ${data.currentPhase} ${data.currentDay}`,
   );
   revalidateGame(gameId, game.event.slug);
+  return jackOut ? { jackOut } : {};
+}
+
+function viaNight(metadata?: string | null) {
+  if (!metadata) return false;
+  try {
+    return JSON.parse(metadata).via === "night";
+  } catch {
+    return false;
+  }
+}
+
+async function undoNightResolution(gameId: string, nightNumber: number) {
+  const { game } = await narratorGame(gameId);
+  const via = game.actions.filter((action) => action.dayNumber === nightNumber && viaNight(action.metadata));
+  for (const action of via) {
+    await prisma.gameAction.update({ where: { id: action.id }, data: { reversed: true } });
+    if ((action.actionType === "eliminate" || action.actionType === "jackOut") && action.targetPlayerId) {
+      await prisma.gamePlayer.update({
+        where: { id: action.targetPlayerId },
+        data: { alive: true, eliminatedAt: null, eliminationReason: null },
+      });
+    }
+    if (action.actionType === "revive" && action.targetPlayerId) {
+      await prisma.gamePlayer.update({
+        where: { id: action.targetPlayerId },
+        data: { alive: false, eliminatedAt: new Date(), eliminationReason: "night_undo" },
+      });
+    }
+  }
+}
+
+async function applyNightResolution(gameId: string, nightNumber: number) {
+  await undoNightResolution(gameId, nightNumber);
+  const { user, game } = await narratorGame(gameId);
+  const result = resolveNight(game.actions, game.players, nightNumber);
+  const meta = JSON.stringify({ via: "night" });
+  let jackOut: { jackName: string; cursedName: string } | undefined;
+
+  for (const playerId of result.shieldBreakIds) {
+    const player = game.players.find((item) => item.id === playerId);
+    const name = player ? player.user.displayNameEn || player.user.displayName : playerId;
+    await log(
+      gameId,
+      nightNumber,
+      "night_resolution",
+      user.id,
+      "shieldBreak",
+      `جلیقه: ${name}`,
+      `Shield broken: ${name}`,
+      playerId,
+      meta,
+    );
+  }
+
+  for (const playerId of result.leaveIds) {
+    const killed = await eliminatePlayerAction(gameId, playerId, "night", meta);
+    if (killed && "jackOut" in killed && killed.jackOut) jackOut = killed.jackOut;
+  }
+
+  for (const playerId of result.returnIds) {
+    await revivePlayerAction(gameId, playerId, meta);
+  }
+
+  if (result.leaveIds.length || result.returnIds.length || result.shieldBreakIds.length || result.notes.length) {
+    await log(
+      gameId,
+      nightNumber,
+      "night_resolution",
+      user.id,
+      "nightResolved",
+      result.notes.join(" ") || "Night resolved",
+      result.notes.join(" ") || "Night resolved",
+      undefined,
+      meta,
+    );
+  }
+
+  return jackOut;
 }
 
 export async function recordJackCurseAction(gameId: string, targetPlayerId: string) {
@@ -183,6 +274,11 @@ export async function recordJackCurseAction(gameId: string, targetPlayerId: stri
     game.currentDay,
   );
   if (!round.eligibleIds.includes(targetPlayerId)) return { error: "repeat" };
+
+  await prisma.gameAction.updateMany({
+    where: { gameId, dayNumber: game.currentDay, actionType: "jack", reversed: false },
+    data: { reversed: true },
+  });
 
   const targetName = target.user.displayNameEn || target.user.displayName;
   await log(
@@ -205,6 +301,42 @@ export async function recordStageAction(
   targetPlayerId?: string,
 ) {
   const { user, game } = await narratorGame(gameId);
+  const otherNights = (type: string) =>
+    game.actions.filter((action) => action.actionType === type && action.dayNumber !== game.currentDay);
+
+  const watson = game.players.find((player) => player.roleKey === "watson");
+  if (actionType === "watson" && watson && targetPlayerId === watson.id) {
+    if (otherNights("watson").some((action) => action.targetPlayerId === watson.id)) return { error: "self_save" };
+  }
+  const lecter = game.players.find((player) => player.roleKey === "lecter");
+  if (actionType === "lecter" && lecter && targetPlayerId === lecter.id) {
+    if (otherNights("lecter").some((action) => action.targetPlayerId === lecter.id)) return { error: "self_save" };
+  }
+  if (actionType === "kane" && otherNights("kane").length) return { error: "used" };
+  if (actionType === "constantine" && otherNights("constantine").length) return { error: "used" };
+  if (actionType === "leon") {
+    const nights = new Set(otherNights("leon").map((action) => action.dayNumber));
+    if (nights.size >= 2) return { error: "spent" };
+  }
+
+  const main = ["mafiaShot", "sixthSense", "saul"];
+  const replaceTypes = main.includes(actionType)
+    ? main
+    : (NIGHT_REPLACEABLE as readonly string[]).includes(actionType)
+      ? [actionType]
+      : [];
+  if (replaceTypes.length) {
+    await prisma.gameAction.updateMany({
+      where: {
+        gameId,
+        dayNumber: game.currentDay,
+        actionType: { in: replaceTypes },
+        reversed: false,
+      },
+      data: { reversed: true },
+    });
+  }
+
   await log(
     gameId,
     game.currentDay,
@@ -215,20 +347,19 @@ export async function recordStageAction(
     messageEn,
     targetPlayerId,
   );
-  if (actionType === "constantine" && targetPlayerId) {
-    await prisma.gamePlayer.update({
-      where: { id: targetPlayerId },
-      data: { alive: true, eliminatedAt: null, eliminationReason: null },
-    });
-  }
   revalidateGame(gameId, game.event.slug);
 }
 
 export async function swapRolesAction(gameId: string, fromPlayerId: string, toPlayerId: string) {
   const { user, game } = await narratorGame(gameId);
+  if (game.actions.some((action) => action.actionType === "faceChange")) {
+    return { error: "used" };
+  }
   const from = game.players.find((player) => player.id === fromPlayerId);
   const to = game.players.find((player) => player.id === toPlayerId);
   if (!from || !to) return { error: "not_found" };
+  if (from.alive || !to.alive) return { error: "seats" };
+  if (from.id === to.id) return { error: "same" };
   await prisma.$transaction([
     prisma.gamePlayer.update({
       where: { id: from.id },
@@ -260,7 +391,7 @@ export async function swapRolesAction(gameId: string, fromPlayerId: string, toPl
     user.id,
     "faceChange",
     `تغییر چهره: ${from.user.displayName} ↔ ${to.user.displayName}`,
-    `Face change: ${from.user.displayNameEn || from.user.displayName} ↔ ${to.user.displayNameEn || to.user.displayName}`,
+    `Face-off: ${from.user.displayNameEn || from.user.displayName} ↔ ${to.user.displayNameEn || to.user.displayName}`,
     to.id,
   );
   revalidateGame(gameId, game.event.slug);
@@ -317,7 +448,7 @@ export async function setVoteAction(
   revalidateGame(gameId, game.event.slug);
 }
 
-export async function eliminatePlayerAction(gameId: string, playerId: string, reason: string) {
+export async function eliminatePlayerAction(gameId: string, playerId: string, reason: string, metadata = "{}") {
   const { user, game } = await narratorGame(gameId);
   const player = game.players.find((p) => p.id === playerId);
   if (!player || !player.alive) return { error: "not_found" };
@@ -334,6 +465,7 @@ export async function eliminatePlayerAction(gameId: string, playerId: string, re
     `${player.user.displayName} حذف شد`,
     `${player.user.displayNameEn || player.user.displayName} eliminated`,
     playerId,
+    metadata,
   );
 
   const curse = activeJackCurse(game.actions);
@@ -354,11 +486,53 @@ export async function eliminatePlayerAction(gameId: string, playerId: string, re
       `طلسم جک با ${player.user.displayName} از بازی خارج شد — جک هم حذف شد`,
       `Jack’s curse left with ${cursedName}. Jack is out.`,
       jack.id,
+      metadata,
     );
     revalidateGame(gameId, game.event.slug);
     return { jackOut: { jackName, cursedName } };
   }
 
+  revalidateGame(gameId, game.event.slug);
+}
+
+export async function revivePlayerAction(gameId: string, playerId: string, metadata = "{}") {
+  const { user, game } = await narratorGame(gameId);
+  const player = game.players.find((item) => item.id === playerId);
+  if (!player || player.alive) return { error: "not_found" };
+  await prisma.gamePlayer.update({
+    where: { id: playerId },
+    data: { alive: true, eliminatedAt: null, eliminationReason: null },
+  });
+  await log(
+    gameId,
+    game.currentDay,
+    game.currentPhase,
+    user.id,
+    "revive",
+    `${player.user.displayName} برگشت`,
+    `${player.user.displayNameEn || player.user.displayName} returned to the game`,
+    playerId,
+    metadata,
+  );
+  revalidateGame(gameId, game.event.slug);
+}
+
+export async function recordLeonShotAction(gameId: string, targetPlayerId: string) {
+  const { game } = await narratorGame(gameId);
+  const leon = game.players.find((player) => player.roleKey === "leon" && player.alive);
+  const target = game.players.find((player) => player.id === targetPlayerId && player.alive);
+  if (!leon || !target) return { error: "not_found" };
+  const targetName = target.user.displayNameEn || target.user.displayName;
+  return recordStageAction(gameId, "leon", `Leon shot → ${targetName}`, target.id);
+}
+
+export async function clearTonightAction(gameId: string, actionType: string) {
+  const { game } = await narratorGame(gameId);
+  if (!(NIGHT_REPLACEABLE as readonly string[]).includes(actionType)) return { error: "type" };
+  await prisma.gameAction.updateMany({
+    where: { gameId, dayNumber: game.currentDay, actionType, reversed: false },
+    data: { reversed: true },
+  });
   revalidateGame(gameId, game.event.slug);
 }
 
@@ -462,6 +636,9 @@ export async function revealMyRoleAction(gameId: string) {
 
 export async function endGameAction(gameId: string, winningFaction: string) {
   const { user, game } = await narratorGame(gameId);
+  if (winningFaction !== "citizen" && winningFaction !== "mafia" && winningFaction !== "independent") {
+    return { error: "faction" };
+  }
   await prisma.game.update({
     where: { id: gameId },
     data: {
@@ -474,6 +651,22 @@ export async function endGameAction(gameId: string, winningFaction: string) {
   await prisma.event.update({ where: { id: game.eventId }, data: { status: "finished" } });
   await log(gameId, game.currentDay, "game_over", user.id, "end", `برنده: ${winningFaction}`, `Winner: ${winningFaction}`);
   revalidateGame(gameId, game.event.slug);
+}
+
+export async function resetGameAction(gameId: string) {
+  const { game } = await narratorGame(gameId);
+  const slug = game.event.slug;
+  await prisma.$transaction([
+    prisma.game.deleteMany({ where: { eventId: game.eventId } }),
+    prisma.event.update({
+      where: { id: game.eventId },
+      data: { status: "scenario_pending" },
+    }),
+  ]);
+  revalidatePath(`/events/${slug}`);
+  revalidatePath(`/events/${slug}/players`);
+  revalidatePath("/dashboard");
+  redirect(`/events/${slug}`);
 }
 
 export async function undoLastAction(gameId: string) {
