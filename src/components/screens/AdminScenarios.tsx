@@ -26,12 +26,7 @@ export function AdminScenarios({ scenarios }: { scenarios: ScenarioRow[] }) {
 
   return (
     <div className="flex flex-1 flex-col gap-4">
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="display text-2xl font-semibold">{t("scenarios")}</h1>
-        <Button href="/admin/scenarios/new" className="w-auto min-h-10 px-4 text-sm">
-          {t("newScenario")}
-        </Button>
-      </div>
+      <Button href="/admin/scenarios/new">{t("newScenario")}</Button>
       {[...groups.entries()].map(([count, rows]) => (
         <section key={count} className="space-y-2">
           <p className="text-[11px] uppercase tracking-[0.18em] text-gold">

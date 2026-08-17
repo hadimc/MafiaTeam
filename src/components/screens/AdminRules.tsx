@@ -10,7 +10,6 @@ export function AdminRules({ rules }: { rules: Rule[] }) {
   const { t } = useLang();
   return (
     <div className="flex flex-1 flex-col gap-4">
-      <h1 className="display text-2xl font-semibold">{t("houseRules")}</h1>
       {rules.map((rule) => (
         <form key={rule.id} action={updateRuleAction.bind(null, rule.id)}>
           <Panel className="space-y-3">

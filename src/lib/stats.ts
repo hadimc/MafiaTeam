@@ -92,7 +92,7 @@ export function durationLabel(startedAt?: string | Date | null, finishedAt?: str
 }
 
 export function sideLine(sides: SideWins) {
-  return `Town ${sides.citizen} · Mafia ${sides.mafia} · Independent ${sides.independent}`;
+  return `Citizen ${sides.citizen} · Mafia ${sides.mafia} · Independent ${sides.independent}`;
 }
 
 export function gameOverview(game: {
@@ -146,7 +146,7 @@ export function canReopenScenario(status: string) {
 export function factionLabel(faction: string) {
   if (faction === "mafia") return "Mafia";
   if (faction === "independent") return "Independent";
-  if (faction === "citizen") return "Town";
+  if (faction === "citizen") return "Citizen";
   return faction;
 }
 
