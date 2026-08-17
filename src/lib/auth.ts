@@ -61,10 +61,21 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   }
 }
 
-export async function requireUser() {
+export async function requireUser(next?: string) {
   const user = await getSessionUser();
-  if (!user) redirect("/login");
+  if (!user) {
+    const dest = next && next.startsWith("/") && !next.startsWith("//")
+      ? `/login?next=${encodeURIComponent(next)}`
+      : "/login";
+    redirect(dest);
+  }
   return user;
+}
+
+export function safeNextPath(raw: string | null | undefined) {
+  if (!raw) return "/dashboard";
+  if (!raw.startsWith("/") || raw.startsWith("//")) return "/dashboard";
+  return raw;
 }
 
 export async function requireAdmin() {

@@ -41,6 +41,7 @@ function revalidateGame(gameId: string, slug: string) {
   revalidatePath(`/events/${slug}`);
   revalidatePath(`/events/${slug}/players`);
   revalidatePath("/dashboard");
+  revalidatePath("/past");
 }
 
 export async function dealRolesAction(eventId: string) {

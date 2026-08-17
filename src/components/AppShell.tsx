@@ -22,7 +22,11 @@ export function AppShell({
   return (
     <div className="min-h-dvh">
       <div className="mx-auto flex min-h-dvh max-w-md flex-col">
-        <header className={`sticky top-0 z-20 space-y-3 px-5 py-4 ${inGame ? "hidden" : ""}`}>
+        <header
+          className={`sticky top-0 z-20 space-y-3 px-5 py-4 backdrop-blur-md ${
+            inGame ? "hidden" : inAdmin ? "bg-[#120e0c]/92 shadow-[inset_0_-1px_0_rgba(232,197,71,0.22)]" : "bg-bg/88"
+          }`}
+        >
           <div className="flex items-center justify-between">
             <Link href={inAdmin ? "/admin" : "/dashboard"} className="flex items-center gap-2.5">
               <BrandMark />
@@ -39,24 +43,26 @@ export function AppShell({
             )}
           </div>
           {user?.isAdmin ? (
-            <div className="grid grid-cols-2 gap-1 rounded-2xl border border-line bg-card/80 p-1">
+            <nav aria-label="Member or Admin" className="flex">
               <Link
                 href="/dashboard"
-                className={`rounded-xl py-2 text-center text-xs font-semibold tracking-wide ${
-                  !inAdmin ? "bg-gold text-black" : "text-muted"
+                aria-current={!inAdmin ? "page" : undefined}
+                className={`display flex-1 border-b-2 pb-2.5 text-center text-[15px] font-semibold tracking-[0.16em] ${
+                  !inAdmin ? "border-gold text-gold" : "border-transparent text-muted/55"
                 }`}
               >
                 {t("member")}
               </Link>
               <Link
                 href="/admin"
-                className={`rounded-xl py-2 text-center text-xs font-semibold tracking-wide ${
-                  inAdmin ? "bg-gold text-black" : "text-muted"
+                aria-current={inAdmin ? "page" : undefined}
+                className={`display flex-1 border-b-2 pb-2.5 text-center text-[15px] font-semibold tracking-[0.16em] ${
+                  inAdmin ? "border-gold text-gold" : "border-transparent text-muted/55"
                 }`}
               >
                 {t("admin")}
               </Link>
-            </div>
+            </nav>
           ) : null}
         </header>
         <main className={`flex flex-1 flex-col px-5 pb-8 ${inGame ? "pt-0" : ""}`}>{children}</main>
