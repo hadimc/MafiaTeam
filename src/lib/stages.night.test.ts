@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { resolveNight } from "./stages";
+import { nightLine, resolveNight } from "./stages";
 
 type P = {
   id: string;
@@ -87,6 +87,15 @@ test("Jack is immune to the mafia shot", () => {
   assert.deepEqual(result.leaveIds, []);
 });
 
+test("Matador blocking Leon ignores that shot", () => {
+  const result = resolveNight(
+    [act("leon", lecter.id), act("matador", leon.id)],
+    [leon, lecter, matador],
+    1,
+  );
+  assert.deepEqual(result.leaveIds, []);
+});
+
 test("Matador blocking Watson ignores that save", () => {
   const result = resolveNight(
     [act("mafiaShot", villager.id), act("watson", villager.id), act("matador", watson.id)],
@@ -94,9 +103,83 @@ test("Matador blocking Watson ignores that save", () => {
     1,
   );
   assert.deepEqual(result.leaveIds, [villager.id]);
+  assert.equal(result.notes.some((note) => /matador blocked watson/i.test(note)), true);
+});
+
+test("empty night explains why nobody leaves", () => {
+  const result = resolveNight([], [villager], 1);
+  assert.deepEqual(result.leaveIds, []);
+  assert.equal(result.notes.some((note) => /nobody/i.test(note)), true);
+});
+
+test("sixth sense removes a non-immune independent when Godfather is alive", () => {
+  const godfather = player("g", "godfather", "mafia");
+  const indie = player("z", "zodiac", "independent");
+  const result = resolveNight([act("sixthSense", indie.id)], [godfather, indie], 1);
+  assert.deepEqual(result.leaveIds, [indie.id]);
+});
+
+test("sixth sense does nothing if Godfather is already out", () => {
+  const godfather = { ...player("g", "godfather", "mafia"), alive: false };
+  const indie = player("z", "zodiac", "independent");
+  const result = resolveNight([act("sixthSense", indie.id)], [godfather, indie], 1);
+  assert.deepEqual(result.leaveIds, []);
+});
+
+test("Watson save is ignored if Watson is already out", () => {
+  const deadWatson = { ...watson, alive: false };
+  const result = resolveNight(
+    [act("mafiaShot", villager.id), act("watson", villager.id)],
+    [villager, deadWatson],
+    1,
+  );
+  assert.deepEqual(result.leaveIds, [villager.id]);
+});
+
+test("Lecter save is ignored if Lecter is already out", () => {
+  const deadLecter = { ...lecter, alive: false };
+  const mafioso = player("f", "mafioso", "mafia");
+  const result = resolveNight(
+    [act("leon", mafioso.id), act("lecter", mafioso.id)],
+    [leon, mafioso, deadLecter],
+    1,
+  );
+  assert.deepEqual(result.leaveIds, [mafioso.id]);
+});
+
+test("Matador block is ignored if Matador is already out", () => {
+  const deadMatador = { ...matador, alive: false };
+  const result = resolveNight(
+    [act("mafiaShot", villager.id), act("watson", villager.id), act("matador", watson.id)],
+    [villager, watson, deadMatador],
+    1,
+  );
+  assert.deepEqual(result.leaveIds, []);
 });
 
 test("intro night does not remove anyone", () => {
   const result = resolveNight([act("mafiaShot", villager.id, 0)], [villager], 0);
   assert.deepEqual(result.leaveIds, []);
+});
+
+test("night line skips a role that is not in the scenario", () => {
+  const scenario = new Set(["watson", "leon"]);
+  assert.equal(nightLine("lecter", scenario, [watson, leon], new Set()), "skip");
+});
+
+test("night line still covers a dealt role that is out but not shown", () => {
+  const scenario = new Set(["lecter", "watson"]);
+  const deadLecter = { ...lecter, alive: false };
+  assert.equal(nightLine("lecter", scenario, [deadLecter, watson], new Set()), "cover");
+});
+
+test("night line skips a dealt role once it is publicly shown out", () => {
+  const scenario = new Set(["lecter", "watson"]);
+  const deadLecter = { ...lecter, alive: false };
+  assert.equal(nightLine("lecter", scenario, [deadLecter, watson], new Set([lecter.id])), "skip");
+});
+
+test("night line records while the role is still alive", () => {
+  const scenario = new Set(["lecter"]);
+  assert.equal(nightLine("lecter", scenario, [lecter], new Set()), "record");
 });

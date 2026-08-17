@@ -17,11 +17,12 @@ export function AppShell({
   const { t } = useLang();
   const path = usePathname();
   const inAdmin = path.startsWith("/admin");
+  const inGame = path.startsWith("/games/");
 
   return (
     <div className="min-h-dvh">
       <div className="mx-auto flex min-h-dvh max-w-md flex-col">
-        <header className="sticky top-0 z-20 space-y-3 px-5 py-4">
+        <header className={`sticky top-0 z-20 space-y-3 px-5 py-4 ${inGame ? "hidden" : ""}`}>
           <div className="flex items-center justify-between">
             <Link href={inAdmin ? "/admin" : "/dashboard"} className="flex items-center gap-2.5">
               <BrandMark />
@@ -58,7 +59,7 @@ export function AppShell({
             </div>
           ) : null}
         </header>
-        <main className="flex flex-1 flex-col px-5 pb-8">{children}</main>
+        <main className={`flex flex-1 flex-col px-5 pb-8 ${inGame ? "pt-0" : ""}`}>{children}</main>
       </div>
     </div>
   );

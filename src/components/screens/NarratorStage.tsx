@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useLang, enName } from "@/lib/lang";
 import { Button, Panel, SeatAvatar } from "@/components/ui";
 import { factionLabel } from "@/lib/stats";
@@ -12,21 +13,27 @@ import {
   lastNightReport,
   mafiaLikeOrder,
   mafiaMainTonight,
+  nightLine,
   nightTasks,
   nextStage,
   persistStage,
   prevStage,
+  publicPlayerIds,
   resolveNight,
+  scenarioRoleKeys,
   stageFromGame,
   stageSubtitle,
   stageTitle,
+  tonightPicks,
   tonightTarget,
   townLikeOrder,
   type Stage,
   type StageTask,
+  type NightLine,
 } from "@/lib/stages";
 import { readSnapshot, type SnapshotExitCard } from "@/lib/scenario";
 import {
+  closeGameAction,
   drawExitCardAction,
   eliminatePlayerAction,
   endGameAction,
@@ -40,6 +47,7 @@ import {
   setStageAction,
   startGameAction,
   swapRolesAction,
+  resetFaceChangeAction,
 } from "@/server/actions/games";
 
 type Person = { displayName: string; displayNameEn: string };
@@ -86,18 +94,21 @@ export function NarratorStage({ game }: { game: Game }) {
   const stage = stageFromGame(game);
   const living = game.players.filter((player) => player.alive);
   const dead = game.players.filter((player) => !player.alive);
-  const roles = [...new Set(living.map((player) => player.roleKey))];
-  const dealtRoles = [...new Set(game.players.map((player) => player.roleKey))];
+  const snapshot = readSnapshot(game.scenarioSnapshot);
+  const remainingCards = snapshot.exitCards.filter((item) => !item.used);
+  const scenarioKeys = scenarioRoleKeys(snapshot.roles);
+  const publicIds = publicPlayerIds(game.actions);
+  const lineFor = (roleKey: string) => nightLine(roleKey, scenarioKeys, game.players, publicIds);
+  const scriptRoles = [...scenarioKeys].filter((key) => lineFor(key) !== "skip");
+  const livingRoles = new Set(living.map((player) => player.roleKey));
   const mayorCoupon = game.actions.find(
     (action) => action.actionType === "mayorVeto" || action.actionType === "mayorCoupon",
   );
   const tasks =
     stage.kind === "day"
-      ? dayTasks(stage, roles, mayorCoupon?.dayNumber ?? null)
-      : nightTasks(stage, roles, dead.length > 0, dealtRoles);
+      ? dayTasks(stage, scriptRoles, mayorCoupon?.dayNumber ?? null, livingRoles)
+      : nightTasks(stage, dead.length > 0, lineFor);
   const name = (player?: Player) => (!player ? "—" : enName(player.user));
-  const snapshot = readSnapshot(game.scenarioSnapshot);
-  const remainingCards = snapshot.exitCards.filter((item) => !item.used);
   const counts = {
     citizen: living.filter((player) => player.faction === "citizen").length,
     mafia: living.filter((player) => player.faction === "mafia").length,
@@ -124,22 +135,26 @@ export function NarratorStage({ game }: { game: Game }) {
 
   return (
     <div className="flex flex-1 flex-col pb-28">
-      <Button href={`/events/${game.event.slug}`} variant="ghost" className="mb-3 w-auto self-start min-h-10 px-3 text-sm">
-        {t("back")}
-      </Button>
-
-      <p className="text-[11px] uppercase tracking-[0.22em] text-gold">
-        {game.event.titleEn || game.event.title}
-      </p>
-      <h1 className="display mt-1 text-3xl font-semibold">{stageTitle(stage)}</h1>
-      <p className="mt-1 text-sm text-muted">{stageSubtitle(stage)}</p>
-
-      <div className="mt-4 grid grid-cols-2 gap-2">
-        <Button onClick={() => go("prev")} variant="ghost" disabled={!back}>
-          {t("previous")}
-        </Button>
-        <Button onClick={() => go("next")}>{t("next")}</Button>
-      </div>
+      <header className="sticky top-0 z-20 -mx-5 space-y-3 border-b border-line bg-bg/95 px-5 py-4 backdrop-blur-md">
+        <div className="flex items-center justify-between gap-3">
+          <p className="min-w-0 truncate text-[11px] uppercase tracking-[0.22em] text-gold">
+            <Link href={`/events/${game.event.slug}`} className="hover:text-ink">
+              {game.event.titleEn || game.event.title}
+            </Link>
+          </p>
+          <Button href="/dashboard" variant="ghost" className="w-auto min-h-9 shrink-0 px-3 text-sm">
+            {t("exitGame")}
+          </Button>
+        </div>
+        <h1 className="display text-3xl font-semibold">{stageTitle(stage)}</h1>
+        <p className="text-sm text-muted">{stageSubtitle(stage)}</p>
+        <div className="grid grid-cols-2 gap-2">
+          <Button onClick={() => go("prev")} variant="ghost" disabled={!back}>
+            {t("previous")}
+          </Button>
+          <Button onClick={() => go("next")}>{t("next")}</Button>
+        </div>
+      </header>
 
       <div className="mt-4 grid grid-cols-4 gap-2 text-center">
         <Stat label={t("living")} value={living.length} />
@@ -148,7 +163,13 @@ export function NarratorStage({ game }: { game: Game }) {
         <Stat label={t("independent")} value={counts.independent} accent="text-indie" />
       </div>
 
-      <SeatOverride living={living} dead={dead} name={name} onToggle={overrideSeat} />
+      <SeatOverride
+        living={living}
+        dead={dead}
+        name={name}
+        onToggle={overrideSeat}
+        blockedId={tonightTarget(game.actions, game.currentDay, "matador")}
+      />
 
       <ol className="mt-5 space-y-2">
         {tasks.map((task, index) => (
@@ -179,6 +200,7 @@ export function NarratorStage({ game }: { game: Game }) {
                 onLottery={() => setLotteryOpen(true)}
                 onExitCard={setExitCard}
                 onRemove={(playerId, reason) => overrideSeat(playerId, true, reason)}
+                lineFor={lineFor}
               />
             ) : null}
           </li>
@@ -194,13 +216,31 @@ export function NarratorStage({ game }: { game: Game }) {
       {danger === "end" ? (
         <Panel className="mt-4 space-y-3">
           <p className="text-sm text-muted">{t("gameOverWarn")}</p>
-          <Button onClick={() => endGameAction(game.id, "citizen")} variant="danger">
+          <Button
+            onClick={() => {
+              setDanger(null);
+              void endGameAction(game.id, "citizen");
+            }}
+            variant="danger"
+          >
             {t("townWins")}
           </Button>
-          <Button onClick={() => endGameAction(game.id, "mafia")} variant="danger">
+          <Button
+            onClick={() => {
+              setDanger(null);
+              void endGameAction(game.id, "mafia");
+            }}
+            variant="danger"
+          >
             {t("mafiaWins")}
           </Button>
-          <Button onClick={() => endGameAction(game.id, "independent")} variant="danger">
+          <Button
+            onClick={() => {
+              setDanger(null);
+              void endGameAction(game.id, "independent");
+            }}
+            variant="danger"
+          >
             {t("independentWins")}
           </Button>
           <Button onClick={() => setDanger(null)} variant="ghost">
@@ -218,18 +258,21 @@ export function NarratorStage({ game }: { game: Game }) {
           </Button>
         </Panel>
       ) : (
-        <div className={`mt-4 grid gap-2 ${game.winningFaction ? "grid-cols-2" : "grid-cols-3"}`}>
-          <Button href={`/games/${game.id}/narrator/history`} variant="ghost">
-            {t("history")}
-          </Button>
-          {game.winningFaction ? null : (
-            <Button onClick={() => setDanger("end")} variant="ghost">
-              {t("gameOver")}
+        <div className="mt-4 space-y-2">
+          {game.winningFaction ? (
+            <Button onClick={() => closeGameAction(game.id)}>{t("closeGame")}</Button>
+          ) : null}
+          <div className="grid grid-cols-3 gap-2">
+            <Button href={`/games/${game.id}/narrator/history`} variant="ghost">
+              {t("history")}
             </Button>
-          )}
-          <Button onClick={() => setDanger("reset")} variant="ghost">
-            {t("resetGame")}
-          </Button>
+            <Button onClick={() => setDanger("end")} variant="ghost">
+              {game.winningFaction ? t("changeWinner") : t("gameOver")}
+            </Button>
+            <Button onClick={() => setDanger("reset")} variant="ghost">
+              {t("resetGame")}
+            </Button>
+          </div>
         </div>
       )}
 
@@ -285,6 +328,7 @@ function TaskBody({
   onLottery,
   onExitCard,
   onRemove,
+  lineFor,
 }: {
   task: StageTask;
   stage: Stage;
@@ -297,6 +341,7 @@ function TaskBody({
   onLottery: () => void;
   onExitCard: (card: SnapshotExitCard) => void;
   onRemove: (playerId: string, reason: string) => void;
+  lineFor: (roleKey: string) => NightLine;
 }) {
   const introNight = stage.kind === "night" && stage.n === 0;
   const mayorCouponUsed = game.actions.some(
@@ -342,6 +387,8 @@ function TaskBody({
         />
       ) : null}
 
+      {task.key === "nightEnd" ? <NightPreview game={game} name={name} byId={byId} /> : null}
+
       {task.key === "inquiry" ? (
         <InquiryReport
           gameId={game.id}
@@ -356,25 +403,35 @@ function TaskBody({
       ) : null}
 
       {task.key === "nostradamus" ? (
-        <PickList
-          label="Target"
-          players={living}
-          name={name}
-          onPick={(player) =>
-            recordStageAction(game.id, task.key, `${task.nameEn} → ${name(player)}`, player.id)
-          }
-        />
+        lineFor("nostradamus") === "record" ? (
+          <PickList
+            label="Target"
+            players={living}
+            name={name}
+            onPick={(player) =>
+              recordStageAction(game.id, task.key, `${task.nameEn} → ${name(player)}`, player.id)
+            }
+          />
+        ) : (
+          <p className="text-xs text-muted">Say the line. Nothing to record.</p>
+        )
       ) : null}
 
       {task.key === "jack" ? (
-        <JackCurse
-          gameId={game.id}
-          living={living}
-          name={name}
-          curses={curses}
-          byId={byId}
-          frozen={jackShown || !jackPlayer?.alive}
-        />
+        lineFor("jack") === "record" && !jackShown ? (
+          <JackCurse
+            gameId={game.id}
+            living={living}
+            name={name}
+            curses={curses}
+            byId={byId}
+            frozen={false}
+          />
+        ) : (
+          <p className="text-xs text-muted">
+            {jackShown ? "The curse stays where it is." : "Say the line. Nothing to record."}
+          </p>
+        )
       ) : null}
 
       {task.key === "mafia" && introNight ? <LikeOrder label="Like order" players={mafiaLikes} name={name} /> : null}
@@ -383,15 +440,11 @@ function TaskBody({
       ) : null}
 
       {task.key === "mafia" && !introNight ? (
-        <MafiaNight game={game} living={living} name={name} />
+        <MafiaNight game={game} living={living} name={name} lineFor={lineFor} />
       ) : null}
 
       {task.key === "town" && !introNight ? (
-        <TownNight game={game} living={living} dead={dead} name={name} />
-      ) : null}
-
-      {task.key === "nightEnd" ? (
-        <NightPreview game={game} name={name} />
+        <TownNight game={game} living={living} dead={dead} name={name} lineFor={lineFor} />
       ) : null}
 
       {task.key === "faceChange" ? (
@@ -400,7 +453,7 @@ function TaskBody({
           living={living}
           name={name}
           gameId={game.id}
-          used={game.actions.some((action) => action.actionType === "faceChange")}
+          used={game.actions.find((action) => action.actionType === "faceChange")}
         />
       ) : null}
 
@@ -459,10 +512,106 @@ function NightReport({
   back: (Player | undefined)[];
   name: (player?: Player) => string;
 }) {
+  const independents = leave.filter(
+    (player): player is Player => Boolean(player) && player.faction === "independent",
+  );
   return (
     <div className="space-y-3">
       <ReportNames label="Leave the game" players={leave} name={name} empty="Nobody leaves." />
+      {independents.map((player) => (
+        <div key={player.id} className="rounded-2xl border border-gold/40 bg-gold/10 px-4 py-3">
+          <p className="text-[11px] uppercase tracking-[0.22em] text-gold">Announce</p>
+          <p className="mt-1 font-semibold">{player.roleNameEn} is out</p>
+          <p dir="rtl" lang="fa" className="farsi mt-1 text-sm text-gold">
+            {player.roleName} حذف شد
+          </p>
+          <p className="mt-2 text-sm text-muted">
+            {name(player)} was {player.roleNameEn}.
+          </p>
+        </div>
+      ))}
       <ReportNames label="Back in the game" players={back} name={name} empty="Nobody returns." />
+    </div>
+  );
+}
+
+const NIGHT_PICK_LABELS: { key: string; label: string }[] = [
+  { key: "mafiaShot", label: "Mafia shot" },
+  { key: "sixthSense", label: "Sixth sense" },
+  { key: "saul", label: "Purchase" },
+  { key: "lecter", label: "Lecter save" },
+  { key: "matador", label: "Matador block" },
+  { key: "watson", label: "Watson save" },
+  { key: "leon", label: "Leon shot" },
+  { key: "kane", label: "Kane mark" },
+  { key: "detective", label: "Detective inquiry" },
+  { key: "constantine", label: "Constantine" },
+  { key: "gunner", label: "Gunner" },
+  { key: "jack", label: "Jack curse" },
+];
+
+function NightPreview({
+  game,
+  name,
+  byId,
+}: {
+  game: Game;
+  name: (player?: Player) => string;
+  byId: Map<string, Player>;
+}) {
+  const preview = resolveNight(game.actions, game.players, game.currentDay);
+  const picks = tonightPicks(game.actions, game.currentDay);
+  const recorded = NIGHT_PICK_LABELS.flatMap((item) => {
+    const id = picks.get(item.key);
+    return id ? [{ ...item, player: byId.get(id) }] : [];
+  });
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <p className="mb-2 text-[11px] uppercase tracking-wide text-muted">Recorded tonight</p>
+        {recorded.length === 0 ? (
+          <p className="text-sm text-muted">Nothing recorded.</p>
+        ) : (
+          <ul className="space-y-1 text-sm">
+            {recorded.map((row) => (
+              <li key={row.key}>
+                {row.label}: {name(row.player)}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+      <div>
+        <p className="mb-2 text-[11px] uppercase tracking-wide text-muted">Why</p>
+        <ul className="space-y-2">
+          {preview.notes.map((note) => (
+            <li key={note} className="text-sm text-gold">
+              {note}
+            </li>
+          ))}
+        </ul>
+      </div>
+      <ReportNames
+        label="Would leave"
+        players={preview.leaveIds.map((id) => byId.get(id))}
+        name={name}
+        empty="Nobody leaves."
+      />
+      <ReportNames
+        label="Would return"
+        players={preview.returnIds.map((id) => byId.get(id))}
+        name={name}
+        empty="Nobody returns."
+      />
+      {preview.shieldBreakIds.length > 0 ? (
+        <ReportNames
+          label="Shield breaks"
+          players={preview.shieldBreakIds.map((id) => byId.get(id))}
+          name={name}
+          empty="None."
+        />
+      ) : null}
     </div>
   );
 }
@@ -645,6 +794,8 @@ function PickList({
   onPick,
   selectedId,
   showRole = false,
+  markedId,
+  markedNote,
 }: {
   label: string;
   players: Player[];
@@ -652,6 +803,8 @@ function PickList({
   onPick: (player: Player) => void;
   selectedId?: string | null;
   showRole?: boolean;
+  markedId?: string | null;
+  markedNote?: string;
 }) {
   if (players.length === 0) return null;
   return (
@@ -673,6 +826,9 @@ function PickList({
               {showRole ? (
                 <span className="block truncate text-[11px] text-muted">{player.roleNameEn || player.roleName}</span>
               ) : null}
+              {markedId === player.id && markedNote ? (
+                <span className="block truncate text-[11px] font-semibold text-gold">{markedNote}</span>
+              ) : null}
             </span>
           </button>
         ))}
@@ -686,11 +842,13 @@ function SeatOverride({
   dead,
   name,
   onToggle,
+  blockedId,
 }: {
   living: Player[];
   dead: Player[];
   name: (player?: Player) => string;
   onToggle: (playerId: string, currentlyAlive: boolean) => void;
+  blockedId?: string | null;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -710,6 +868,8 @@ function SeatOverride({
             players={living}
             name={name}
             showRole
+            markedId={blockedId}
+            markedNote="Cannot act tonight"
             onPick={(player) => onToggle(player.id, true)}
           />
           <PickList
@@ -725,90 +885,143 @@ function SeatOverride({
   );
 }
 
+function NightAbility({
+  title,
+  line,
+  blocked,
+  children,
+}: {
+  title: string;
+  line: NightLine;
+  blocked?: string | null;
+  children: React.ReactNode;
+}) {
+  if (line === "skip") return null;
+  return (
+    <div>
+      <p className="mb-2 text-[11px] uppercase tracking-wide text-muted">{title}</p>
+      {line === "cover" ? (
+        <p className="text-xs text-muted">Say the line. Nothing to record.</p>
+      ) : blocked ? (
+        <CannotActNote who={blocked} />
+      ) : (
+        children
+      )}
+    </div>
+  );
+}
+
+function CannotActNote({ who }: { who: string }) {
+  return (
+    <div className="rounded-2xl border border-gold/50 bg-gold/10 px-4 py-3">
+      <p className="text-[11px] uppercase tracking-[0.22em] text-gold">Cannot act tonight</p>
+      <p dir="rtl" lang="fa" className="farsi mt-1 text-sm text-gold">
+        امشب توانایی ندارد
+      </p>
+      <p className="mt-2 text-sm font-semibold">{who}</p>
+      <p className="mt-1 text-xs text-muted">Matador took this ability. Say the line. Do not record.</p>
+    </div>
+  );
+}
+
 function MafiaNight({
   game,
   living,
   name,
+  lineFor,
 }: {
   game: Game;
   living: Player[];
   name: (player?: Player) => string;
+  lineFor: (roleKey: string) => NightLine;
 }) {
   const [main, setMain] = useState<"mafiaShot" | "sixthSense" | "saul" | null>(null);
-  const godfather = living.some((player) => player.roleKey === "godfather");
-  const saul = living.some((player) => player.roleKey === "saul");
-  const lecter = living.some((player) => player.roleKey === "lecter");
-  const matador = living.some((player) => player.roleKey === "matador");
   const taken = mafiaMainTonight(game.actions, game.currentDay);
-  const selectedMain = main ?? (taken?.actionType as "mafiaShot" | "sixthSense" | "saul" | undefined) ?? null;
+  const saulUsed = game.actions.some(
+    (action) => action.actionType === "saul" && action.dayNumber !== game.currentDay,
+  );
+  const blocked = game.players.find(
+    (player) => player.id === tonightTarget(game.actions, game.currentDay, "matador"),
+  );
+  const blockedRole = blocked?.roleKey;
+  const canShot = living.some((player) => player.faction === "mafia") && blockedRole !== "godfather";
+  const canSixth = living.some((player) => player.roleKey === "godfather") && blockedRole !== "godfather";
+  const canBuy = living.some((player) => player.roleKey === "saul") && !saulUsed && blockedRole !== "saul";
   const options = [
-    { key: "mafiaShot" as const, label: "Shot", on: true },
-    { key: "sixthSense" as const, label: "Sixth sense", on: godfather },
-    { key: "saul" as const, label: "Purchase", on: saul },
+    ...(canShot ? [{ key: "mafiaShot" as const, label: "Shot" }] : []),
+    ...(canSixth ? [{ key: "sixthSense" as const, label: "Sixth sense" }] : []),
+    ...(canBuy ? [{ key: "saul" as const, label: "Purchase" }] : []),
   ];
+  const requested = main ?? (taken?.actionType as "mafiaShot" | "sixthSense" | "saul" | undefined) ?? null;
+  const selectedMain = options.some((option) => option.key === requested) ? requested : null;
   return (
     <div className="space-y-4">
-      <p className="text-xs text-gold">Say the full list. Tap a different name to correct it. Nobody leaves yet.</p>
+      <p className="text-xs text-gold">Say the list for roles in this scenario. Tap a different name to correct it. Nobody leaves yet.</p>
       <div>
         <p className="mb-2 text-[11px] uppercase tracking-wide text-muted">Main action — pick one</p>
-        <div className="grid grid-cols-3 gap-2">
-          {options.map((option) => (
-            <button
-              key={option.key}
-              type="button"
-              disabled={!option.on}
-              onClick={() => setMain(option.key)}
-              className={`min-h-12 rounded-2xl border px-2 text-xs font-semibold ${
-                selectedMain === option.key ? "border-gold bg-gold/10 text-gold" : "border-line bg-bg-elev"
-              } disabled:opacity-40`}
-            >
-              {option.label}
-              {!option.on ? <span className="mt-1 block text-[10px] font-normal text-muted">not seated</span> : null}
-            </button>
-          ))}
-        </div>
-        {selectedMain ? (
-          <div className="mt-3">
-            <PickList
-              label="Target — tap again to change"
-              players={living}
-              name={name}
-              selectedId={tonightTarget(game.actions, game.currentDay, selectedMain)}
-              onPick={(player) =>
-                recordStageAction(game.id, selectedMain, `Mafia ${selectedMain} → ${name(player)}`, player.id)
-              }
-            />
-          </div>
+        {blockedRole === "godfather" && blocked ? (
+          <CannotActNote who={`${name(blocked)} (${blocked.roleNameEn})`} />
+        ) : null}
+        {options.length === 0 && blockedRole !== "godfather" ? (
+          <p className="text-xs text-muted">Mafia is out. Say the line if the table should not know. Nothing to record.</p>
+        ) : options.length > 0 ? (
+          <>
+            <div className={`grid gap-2 ${options.length === 3 ? "grid-cols-3" : options.length === 2 ? "grid-cols-2" : "grid-cols-1"}`}>
+              {options.map((option) => (
+                <button
+                  key={option.key}
+                  type="button"
+                  onClick={() => setMain(option.key)}
+                  className={`min-h-12 rounded-2xl border px-2 text-xs font-semibold ${
+                    selectedMain === option.key ? "border-gold bg-gold/10 text-gold" : "border-line bg-bg-elev"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            {selectedMain ? (
+              <div className="mt-3">
+                <PickList
+                  label="Target — tap again to change"
+                  players={living}
+                  name={name}
+                  selectedId={tonightTarget(game.actions, game.currentDay, selectedMain)}
+                  onPick={(player) =>
+                    recordStageAction(game.id, selectedMain, `Mafia ${selectedMain} → ${name(player)}`, player.id)
+                  }
+                />
+              </div>
+            ) : null}
+          </>
         ) : null}
       </div>
-      <div>
-        <p className="mb-2 text-[11px] uppercase tracking-wide text-muted">Lecter save</p>
-        {lecter ? (
-          <PickList
-            label="Save — tap again to change"
-            players={living.filter((player) => player.faction === "mafia")}
-            name={name}
-            selectedId={tonightTarget(game.actions, game.currentDay, "lecter")}
-            onPick={(player) => recordStageAction(game.id, "lecter", `Lecter save → ${name(player)}`, player.id)}
-          />
-        ) : (
-          <p className="text-xs text-muted">Say the line. Lecter is not seated — nothing to record.</p>
-        )}
-      </div>
-      <div>
-        <p className="mb-2 text-[11px] uppercase tracking-wide text-muted">Matador disability</p>
-        {matador ? (
-          <PickList
-            label="Block — tap again to change"
-            players={living}
-            name={name}
-            selectedId={tonightTarget(game.actions, game.currentDay, "matador")}
-            onPick={(player) => recordStageAction(game.id, "matador", `Matador block → ${name(player)}`, player.id)}
-          />
-        ) : (
-          <p className="text-xs text-muted">Say the line. Matador is not seated — nothing to record.</p>
-        )}
-      </div>
+      <NightAbility
+        title="Lecter save"
+        line={lineFor("lecter")}
+        blocked={blockedRole === "lecter" && blocked ? `${name(blocked)} (${blocked.roleNameEn})` : null}
+      >
+        <PickList
+          label="Save — tap again to change"
+          players={living.filter((player) => player.faction === "mafia")}
+          name={name}
+          selectedId={tonightTarget(game.actions, game.currentDay, "lecter")}
+          onPick={(player) => recordStageAction(game.id, "lecter", `Lecter save → ${name(player)}`, player.id)}
+        />
+      </NightAbility>
+      <NightAbility title="Matador disability" line={lineFor("matador")}>
+        <PickList
+          label="Block — tap again to change"
+          players={living}
+          name={name}
+          selectedId={blocked?.id}
+          markedId={blocked?.id}
+          markedNote="Cannot act tonight"
+          showRole
+          onPick={(player) => recordStageAction(game.id, "matador", `Matador block → ${name(player)}`, player.id)}
+        />
+        {blocked ? <CannotActNote who={`${name(blocked)} (${blocked.roleNameEn})`} /> : null}
+      </NightAbility>
     </div>
   );
 }
@@ -818,11 +1031,13 @@ function TownNight({
   living,
   dead,
   name,
+  lineFor,
 }: {
   game: Game;
   living: Player[];
   dead: Player[];
   name: (player?: Player) => string;
+  lineFor: (roleKey: string) => NightLine;
 }) {
   const watson = living.find((player) => player.roleKey === "watson");
   const leon = living.find((player) => player.roleKey === "leon");
@@ -842,137 +1057,114 @@ function TownNight({
       .map((action) => action.dayNumber),
   );
   const extras = [
-    { key: "kane", label: "Citizen Kane — mark", players: living },
-    { key: "detective", label: "Detective — inquiry", players: living },
-    { key: "constantine", label: "Constantine — spirit", players: dead },
-    { key: "gunner", label: "Gunner — give gun", players: living },
-  ];
+    { key: "kane", label: "Citizen Kane — mark", cancel: "Cancel mark", players: living, once: true },
+    { key: "detective", label: "Detective — inquiry", cancel: "Cancel inquiry", players: living, once: false },
+    { key: "constantine", label: "Constantine — spirit", cancel: null, players: dead, once: true },
+    { key: "gunner", label: "Gunner — give gun", cancel: null, players: living, once: false },
+  ] as const;
   const leonTarget = tonightTarget(game.actions, game.currentDay, "leon");
   const preview = resolveNight(game.actions, game.players, game.currentDay);
   const leonNotes = preview.notes.filter((note) => /leon|citizen hit|lecter|shield/i.test(note));
+  const leonLine = lineFor("leon");
+  const leonSpent = leonNights.size >= 2;
+  const blocked = game.players.find(
+    (player) => player.id === tonightTarget(game.actions, game.currentDay, "matador"),
+  );
+  const blockedRole = blocked?.roleKey;
+  const blockedWho = blocked ? `${name(blocked)} (${blocked.roleNameEn})` : null;
 
   return (
     <div className="space-y-4">
-      <p className="text-xs text-gold">Say the full town list. Tap a different name to correct a mistake. Removals wait until Next.</p>
-      <div>
-        <p className="mb-2 text-[11px] uppercase tracking-wide text-muted">Dr. Watson — save</p>
-        {watson ? (
-          <PickList
-            label="Save — tap again to change"
-            players={watsonTargets}
-            name={name}
-            selectedId={tonightTarget(game.actions, game.currentDay, "watson")}
-            onPick={(player) => recordStageAction(game.id, "watson", `Watson save → ${name(player)}`, player.id)}
-          />
-        ) : (
-          <p className="text-xs text-muted">Say the line. Watson is not seated.</p>
-        )}
-      </div>
-      <div>
-        <p className="mb-2 text-[11px] uppercase tracking-wide text-muted">Leon — shot</p>
-        {leonNights.size >= 2 ? (
-          <p className="text-xs text-muted">Leon’s two shots are spent.</p>
-        ) : leon ? (
-          <>
-            <PickList
-              label="If Leon shoots — tap the name again to cancel"
-              players={living.filter((player) => player.id !== leon.id)}
-              name={name}
-              selectedId={leonTarget}
-              onPick={(player) => {
-                if (leonTarget === player.id) {
-                  void clearTonightAction(game.id, "leon");
-                  return;
-                }
-                void recordLeonShotAction(game.id, player.id);
-              }}
-            />
-            {leonTarget ? (
-              <Button
-                variant="ghost"
-                className="mt-2"
-                onClick={() => clearTonightAction(game.id, "leon")}
-              >
-                Cancel shot
-              </Button>
-            ) : null}
-            {leonNotes.map((note) => (
-              <p key={note} className="mt-2 text-xs text-gold">
-                {note}
-              </p>
-            ))}
-          </>
-        ) : (
-          <p className="text-xs text-muted">Say the line. Leon is not seated.</p>
-        )}
-      </div>
+      <p className="text-xs text-gold">Say the list for roles in this scenario. Tap a different name to correct a mistake. Removals wait until Next.</p>
+      <NightAbility title="Dr. Watson — save" line={lineFor("watson")} blocked={blockedRole === "watson" ? blockedWho : null}>
+        <PickList
+          label="Save — tap again to change"
+          players={watsonTargets}
+          name={name}
+          selectedId={tonightTarget(game.actions, game.currentDay, "watson")}
+          onPick={(player) => recordStageAction(game.id, "watson", `Watson save → ${name(player)}`, player.id)}
+        />
+      </NightAbility>
+      {leonLine === "skip" ? null : (
+        <div>
+          <p className="mb-2 text-[11px] uppercase tracking-wide text-muted">Leon — shot</p>
+          {leonLine === "cover" || leonSpent || !leon ? (
+            <p className="text-xs text-muted">
+              {leonSpent ? "Leon’s two shots are spent. Still say the line." : "Say the line. Nothing to record."}
+            </p>
+          ) : blockedRole === "leon" && blockedWho ? (
+            <CannotActNote who={blockedWho} />
+          ) : (
+            <>
+              <PickList
+                label="If Leon shoots — tap the name again to cancel"
+                players={living.filter((player) => player.id !== leon.id)}
+                name={name}
+                selectedId={leonTarget}
+                onPick={(player) => {
+                  if (leonTarget === player.id) {
+                    void clearTonightAction(game.id, "leon");
+                    return;
+                  }
+                  void recordLeonShotAction(game.id, player.id);
+                }}
+              />
+              {leonTarget ? (
+                <Button variant="ghost" className="mt-2" onClick={() => clearTonightAction(game.id, "leon")}>
+                  Cancel shot
+                </Button>
+              ) : null}
+              {leonNotes.map((note) => (
+                <p key={note} className="mt-2 text-xs text-gold">
+                  {note}
+                </p>
+              ))}
+            </>
+          )}
+        </div>
+      )}
       {extras.map((item) => {
-        const seated = item.key === "constantine" || living.some((player) => player.roleKey === item.key);
+        const line = lineFor(item.key);
         const usedBefore = game.actions.some(
           (action) => action.actionType === item.key && action.dayNumber !== game.currentDay,
         );
-        const once = item.key === "kane" || item.key === "constantine";
+        const spent = item.once && usedBefore;
+        const selectedId = tonightTarget(game.actions, game.currentDay, item.key);
+        if (line === "skip") return null;
         return (
           <div key={item.key}>
             <p className="mb-2 text-[11px] uppercase tracking-wide text-muted">{item.label}</p>
-            {!seated ? (
-              <p className="text-xs text-muted">Say the line. Not seated.</p>
-            ) : once && usedBefore ? (
-              <p className="text-xs text-muted">Already used.</p>
+            {line === "cover" || spent ? (
+              <p className="text-xs text-muted">
+                {spent ? "Already used. Still say the line." : "Say the line. Nothing to record."}
+              </p>
+            ) : blockedRole === item.key && blockedWho ? (
+              <CannotActNote who={blockedWho} />
             ) : (
-              <PickList
-                label="Target — tap again to change"
-                players={item.players}
-                name={name}
-                selectedId={tonightTarget(game.actions, game.currentDay, item.key)}
-                onPick={(player) => recordStageAction(game.id, item.key, `${item.label} → ${name(player)}`, player.id)}
-              />
+              <>
+                <PickList
+                  label={item.cancel ? "Target — tap the name again to cancel" : "Target — tap again to change"}
+                  players={item.players}
+                  name={name}
+                  selectedId={selectedId}
+                  onPick={(player) => {
+                    if (item.cancel && selectedId === player.id) {
+                      void clearTonightAction(game.id, item.key);
+                      return;
+                    }
+                    void recordStageAction(game.id, item.key, `${item.label} → ${name(player)}`, player.id);
+                  }}
+                />
+                {item.cancel && selectedId ? (
+                  <Button variant="ghost" className="mt-2" onClick={() => clearTonightAction(game.id, item.key)}>
+                    {item.cancel}
+                  </Button>
+                ) : null}
+              </>
             )}
           </div>
         );
       })}
-    </div>
-  );
-}
-
-function NightPreview({
-  game,
-  name,
-}: {
-  game: Game;
-  name: (player?: Player) => string;
-}) {
-  const result = resolveNight(game.actions, game.players, game.currentDay);
-  const byId = new Map(game.players.map((player) => [player.id, player]));
-  return (
-    <div className="space-y-3">
-      {result.notes.length ? (
-        <ul className="space-y-1 text-sm text-gold">
-          {result.notes.map((note) => (
-            <li key={note}>{note}</li>
-          ))}
-        </ul>
-      ) : (
-        <p className="text-sm text-muted">No night result yet. Record Mafia and Town first.</p>
-      )}
-      <ReportNames
-        label="Would leave"
-        players={result.leaveIds.map((id) => byId.get(id))}
-        name={name}
-        empty="Nobody leaves."
-      />
-      <ReportNames
-        label="Would return"
-        players={result.returnIds.map((id) => byId.get(id))}
-        name={name}
-        empty="Nobody returns."
-      />
-      {result.shieldBreakIds.length ? (
-        <p className="text-xs text-muted">
-          Shield breaks: {result.shieldBreakIds.map((id) => name(byId.get(id))).join(", ")}
-        </p>
-      ) : null}
-      <p className="text-xs text-muted">Tap Next to apply this and go to the next day. You can still change a target first.</p>
     </div>
   );
 }
@@ -988,16 +1180,24 @@ function FaceChange({
   living: Player[];
   name: (player?: Player) => string;
   gameId: string;
-  used: boolean;
+  used?: { messageEn: string } | null;
 }) {
   const [outside, setOutside] = useState<string | null>(null);
   const [inside, setInside] = useState<string | null>(null);
   if (used) {
-    return <p className="text-sm text-gold">Face-off already used. Only one swap per game.</p>;
+    return (
+      <div className="space-y-3">
+        <p className="text-sm text-gold">Face-off used. Only one completed swap per game.</p>
+        <p className="text-sm">{used.messageEn}</p>
+        <Button variant="ghost" onClick={() => resetFaceChangeAction(gameId)}>
+          Reset Face-off
+        </Button>
+      </div>
+    );
   }
   return (
     <div className="space-y-4">
-      <p className="text-xs text-gold">Pick exactly one from each list, then swap.</p>
+      <p className="text-xs text-gold">Pick exactly one from each list, then swap. Reset if this was a mistake.</p>
       <PickList
         label="Outside — pick one (eliminated)"
         players={dead}
