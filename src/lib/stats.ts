@@ -73,6 +73,46 @@ export function computeStats(games: FinishedGame[], meId: string) {
   };
 }
 
+export function countSides(players: { faction: string }[]): SideWins {
+  const sides: SideWins = { ...EMPTY_SIDES };
+  for (const player of players) bump(sides, player.faction);
+  return sides;
+}
+
+export function durationLabel(startedAt?: string | Date | null, finishedAt?: string | Date | null) {
+  if (!startedAt || !finishedAt) return null;
+  const start = new Date(startedAt).getTime();
+  const end = new Date(finishedAt).getTime();
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return null;
+  const mins = Math.round((end - start) / 60000);
+  if (mins < 60) return `${Math.max(0, mins)} min`;
+  const hours = Math.floor(mins / 60);
+  const rest = mins % 60;
+  return rest ? `${hours}h ${rest}m` : `${hours}h`;
+}
+
+export function sideLine(sides: SideWins) {
+  return `Town ${sides.citizen} · Mafia ${sides.mafia} · Independent ${sides.independent}`;
+}
+
+export function gameOverview(game: {
+  currentDay: number;
+  startedAt?: string | Date | null;
+  finishedAt?: string | Date | null;
+  players: { faction: string; alive: boolean }[];
+}) {
+  const living = game.players.filter((player) => player.alive);
+  return {
+    seated: game.players.length,
+    living: living.length,
+    out: game.players.length - living.length,
+    days: game.currentDay,
+    livingBySide: countSides(living),
+    dealtBySide: countSides(game.players),
+    durationLabel: durationLabel(game.startedAt, game.finishedAt),
+  };
+}
+
 export function eventLane(status: string): "open" | "live" | "past" {
   if (status === "finished") return "past";
   if (status === "in_progress") return "live";

@@ -13,8 +13,8 @@ const DAY_TASKS: StageTask[] = [
     key: "nightBrief",
     nameEn: "Night briefing",
     nameFa: "شرح نتایج شب",
-    summaryEn: "Last night’s report: who must leave, and who returns.",
-    notesEn: "From day 2. Last night already updated the seats. Announce the result.",
+    summaryEn: "Announce who must leave, and who returns. Names only, except say who an independent was.",
+    notesEn: "From day 2. Seats already updated. Do not explain why. If an independent left, announce the role.",
   },
   {
     key: "inquiry",
@@ -94,7 +94,7 @@ const NIGHT_TASKS: StageTask[] = [
     nameEn: "Face-off",
     nameFa: "تغییر چهره",
     summaryEn: "One Face-off only: pick one player outside and one player inside. Their roles swap.",
-    notesEn: "Outside = eliminated. Inside = still seated. Jack’s curse stays on the person, not the card.",
+    notesEn: "Outside = eliminated. Inside = still seated. Jack’s curse stays on the person, not the card. Reset if you swapped the wrong pair.",
   },
   {
     key: "nostradamus",
@@ -114,27 +114,54 @@ const NIGHT_TASKS: StageTask[] = [
     key: "mafia",
     nameEn: "Mafia",
     nameFa: "عملیات مافیا",
-    summaryEn: "Say the full list. Main action is one of: shot, sixth sense, or purchase. Then Lecter save and Matador block.",
-    notesEn: "Night 1+. Recite everything so the table hears no extra info. Tap again to correct a target. Nobody leaves until the night ends.",
+    summaryEn: "Say the lines for Mafia roles that are in this scenario. Main action is one of: shot, sixth sense, or purchase. Then Lecter save and Matador block if those roles exist.",
+    notesEn: "Night 1+. Skip roles that were never in this scenario. If a dealt role is out but not publicly known, still say the wake line. Do not record an ability after its holder has left: no sixth sense without Godfather, no purchase without Saul, no Lecter save, no Matador block. Tap again to correct a target. Nobody leaves until the night ends.",
   },
   {
     key: "town",
     nameEn: "Town",
     nameFa: "عملیات شهر",
-    summaryEn: "Say the full town list. Record Watson’s save and Leon’s shot when they act.",
-    notesEn: "Night 1+. Watson may self-save once. Tap a different name to correct a mistake. Removals wait until you go to the next day.",
+    summaryEn: "Say the town lines for roles in this scenario. Record Watson’s save and Leon’s shot when they act.",
+    notesEn: "Night 1+. Skip roles that were never in the scenario. If a dealt role is out but not publicly known, still say the line. Watson may self-save once. Removals wait until you go to the next day.",
   },
   {
     key: "nightEnd",
-    nameEn: "Night result",
+    nameEn: "Night Result",
     nameFa: "نتیجه شب",
-    summaryEn: "Nobody is removed until you tap Next. Check who would leave or return, then end the night.",
-    notesEn: "Watson save beats the Mafia shot. Lecter save beats Leon. You can still go back into Mafia or Town and change a target.",
+    summaryEn: "Check who would leave or return, and why, before you go to the next day.",
+    notesEn: "Narrator only. Confirm the picks match these reasons. Next applies the result to the seats.",
   },
 ];
 
 const MAFIA_LIKE_ORDER = ["godfather", "saul", "lecter", "matador", "mafioso"];
 const TOWN_LIKE_ORDER = ["watson", "leon", "kane", "detective", "constantine", "gunner", "villager"];
+
+export type NightLine = "skip" | "record" | "cover";
+
+export function scenarioRoleKeys(roles: { key: string; quantity: number }[]) {
+  return new Set(roles.filter((role) => role.quantity > 0).map((role) => role.key));
+}
+
+export function publicPlayerIds(actions: { actionType: string; targetPlayerId?: string | null }[]) {
+  return new Set(
+    actions
+      .filter((action) => action.actionType === "shown" && action.targetPlayerId)
+      .map((action) => action.targetPlayerId as string),
+  );
+}
+
+export function nightLine(
+  roleKey: string,
+  scenarioKeys: Set<string>,
+  players: { id: string; roleKey: string; alive: boolean }[],
+  publicIds: Set<string>,
+): NightLine {
+  if (!scenarioKeys.has(roleKey)) return "skip";
+  const holders = players.filter((player) => player.roleKey === roleKey);
+  if (holders.some((player) => player.alive)) return "record";
+  if (holders.length > 0 && holders.every((player) => publicIds.has(player.id))) return "skip";
+  return "cover";
+}
 
 export function stageFromGame(game: { currentDay: number; currentPhase: string; status: string }): Stage {
   const phase = game.currentPhase;
@@ -180,37 +207,41 @@ export function persistStage(stage: Stage) {
   return { currentDay: stage.n, currentPhase: "day_discussion", nightStep: 0, speakerIndex: 0 };
 }
 
-export function dayTasks(stage: Stage, roles: string[], mayorCouponDay: number | null = null) {
-  const set = new Set(roles);
+export function dayTasks(
+  stage: Stage,
+  scriptRoles: string[],
+  mayorCouponDay: number | null = null,
+  livingRoles: Set<string> | null = null,
+) {
+  const set = new Set(scriptRoles);
+  const living = (key: string) => !livingRoles || livingRoles.has(key);
   return DAY_TASKS.filter((task) => {
     if (task.key === "nightBrief" || task.key === "inquiry") return stage.n >= 2;
     if (task.key === "speak") return true;
     if (task.key === "mayorVeto") {
-      if (stage.n < 1 || !set.has("mayor")) return false;
+      if (stage.n < 1 || !set.has("mayor") || !living("mayor")) return false;
       if (mayorCouponDay == null) return true;
       return mayorCouponDay === stage.n;
     }
-    if (task.key === "dayShot") return stage.n >= 1 && set.has("gunner");
+    if (task.key === "dayShot") return stage.n >= 1 && set.has("gunner") && living("gunner");
     if (task.key === "removePlayers") return stage.n >= 1;
     return stage.n >= 1;
   });
 }
 
-export function nightTasks(stage: Stage, livingRoles: string[], hasDead: boolean, dealtRoles: string[] = livingRoles) {
-  const living = new Set(livingRoles);
-  const dealt = new Set(dealtRoles);
+export function nightTasks(
+  stage: Stage,
+  hasDead: boolean,
+  line: (roleKey: string) => NightLine,
+) {
+  const anyMafia = MAFIA_LIKE_ORDER.some((key) => line(key) !== "skip");
+  const anyTown = TOWN_LIKE_ORDER.some((key) => line(key) !== "skip");
   return NIGHT_TASKS.filter((task) => {
     if (task.key === "faceChange") return stage.n >= 1 && hasDead;
-    if (task.key === "nostradamus") return stage.n === 0 && living.has("nostradamus");
-    if (task.key === "jack") return dealt.has("jack");
-    if (task.key === "mafia") {
-      if (stage.n >= 1) return true;
-      return MAFIA_LIKE_ORDER.some((key) => living.has(key));
-    }
-    if (task.key === "town") {
-      if (stage.n >= 1) return true;
-      return TOWN_LIKE_ORDER.some((key) => living.has(key));
-    }
+    if (task.key === "nostradamus") return stage.n === 0 && line("nostradamus") !== "skip";
+    if (task.key === "jack") return line("jack") !== "skip";
+    if (task.key === "mafia") return anyMafia;
+    if (task.key === "town") return anyTown;
     if (task.key === "nightEnd") return stage.n >= 1;
     return true;
   });
@@ -323,6 +354,37 @@ export type NightPlayer = {
   alive?: boolean;
 };
 
+export const NIGHT_ACTION_ROLE: Record<string, string> = {
+  sixthSense: "godfather",
+  saul: "saul",
+  lecter: "lecter",
+  matador: "matador",
+  watson: "watson",
+  leon: "leon",
+  kane: "kane",
+  detective: "detective",
+  constantine: "constantine",
+  gunner: "gunner",
+};
+
+export function livingHolds(
+  players: { roleKey: string; alive?: boolean }[],
+  roleKey: string,
+) {
+  return players.some((player) => player.roleKey === roleKey && player.alive !== false);
+}
+
+function dropDeadRolePicks(picks: Map<string, string>, players: NightPlayer[]) {
+  const dropped: string[] = [];
+  for (const actionType of [...picks.keys()]) {
+    const role = NIGHT_ACTION_ROLE[actionType];
+    if (!role || livingHolds(players, role)) continue;
+    picks.delete(actionType);
+    dropped.push(actionType);
+  }
+  return dropped;
+}
+
 export function tonightPicks(actions: NightPickAction[], dayNumber: number) {
   const picks = new Map<string, string>();
   for (const action of actions) {
@@ -348,22 +410,58 @@ export function resolveNight(
   }
 
   const picks = tonightPicks(actions, nightNumber);
+  const dropped = dropDeadRolePicks(picks, players);
   const byId = new Map(players.map((player) => [player.id, player]));
   const blockedId = picks.get("matador");
   const blockedRole = blockedId ? byId.get(blockedId)?.roleKey ?? null : null;
   const ability = (role: string, key: string) => (blockedRole === role ? undefined : picks.get(key));
 
+  const watsonPick = picks.get("watson");
   const watsonSave = ability("watson", "watson");
   const lecterSave = ability("lecter", "lecter");
   const leonTargetId = ability("leon", "leon");
   const constantineId = ability("constantine", "constantine");
-  const mafiaShotId = blockedRole === "godfather" ? undefined : picks.get("mafiaShot");
-  const sixthId = blockedRole === "godfather" ? undefined : picks.get("sixthSense");
+  const mafiaShotPick = picks.get("mafiaShot");
+  const sixthPick = picks.get("sixthSense");
+  const mafiaShotId = blockedRole === "godfather" ? undefined : mafiaShotPick;
+  const sixthId = blockedRole === "godfather" ? undefined : sixthPick;
 
   const leave = new Set<string>();
   const shieldBreakIds: string[] = [];
   const notes: string[] = [];
   const immune = (player: NightPlayer) => NIGHT_IMMUNE.has(player.roleKey);
+  const droppedNote: Record<string, string> = {
+    sixthSense: "Godfather is out. Sixth sense does not apply.",
+    saul: "Saul is out. Purchase does not apply.",
+    lecter: "Lecter is out. That save does not apply.",
+    matador: "Matador is out. That block does not apply.",
+    watson: "Watson is out. That save does not apply.",
+    leon: "Leon is out. That shot does not apply.",
+    constantine: "Constantine is out. Nobody returns.",
+  };
+  for (const actionType of dropped) {
+    const note = droppedNote[actionType];
+    if (note) notes.push(note);
+  }
+
+  if (blockedRole === "watson" && watsonPick) {
+    notes.push("Matador blocked Watson. That save does not apply.");
+  }
+  if (blockedRole === "leon" && picks.get("leon")) {
+    notes.push("Matador blocked Leon. That shot does not apply.");
+  }
+  if (blockedRole === "lecter" && picks.get("lecter")) {
+    notes.push("Matador blocked Lecter. That save does not apply.");
+  }
+  if (blockedRole === "constantine" && picks.get("constantine")) {
+    notes.push("Matador blocked Constantine. Nobody returns.");
+  }
+  if (blockedRole === "godfather" && (mafiaShotPick || sixthPick)) {
+    notes.push("Matador blocked the Godfather. The mafia main action does not apply.");
+  }
+  if (blockedId && notes.every((note) => !/matador blocked/i.test(note))) {
+    notes.push("Matador disabled that player. They cannot act tonight.");
+  }
 
   if (mafiaShotId) {
     const target = byId.get(mafiaShotId);
@@ -371,12 +469,13 @@ export function resolveNight(
       if (immune(target)) {
         notes.push("Night-immune. The mafia shot does nothing.");
       } else if (watsonSave === target.id) {
-        notes.push("Watson saved the mafia-shot target.");
+        notes.push("Watson saved the mafia-shot target. They stay.");
       } else if (target.roleKey === "leon" && hasShield(actions, target.id, nightNumber)) {
         shieldBreakIds.push(target.id);
-        notes.push("Leon’s vest absorbed the mafia shot.");
+        notes.push("Leon’s vest absorbed the mafia shot. They stay.");
       } else {
         leave.add(target.id);
+        notes.push("Mafia shot stands. That player leaves.");
       }
     }
   }
@@ -385,6 +484,9 @@ export function resolveNight(
     const target = byId.get(sixthId);
     if (target && target.faction === "independent" && !immune(target)) {
       leave.add(target.id);
+      notes.push("Sixth sense found an independent. That player leaves.");
+    } else if (target) {
+      notes.push("Sixth sense did not remove anyone.");
     }
   }
 
@@ -396,18 +498,19 @@ export function resolveNight(
         notes.push("Night-immune. Leon’s shot does nothing.");
       } else if (target.faction === "citizen") {
         leave.add(leon.id);
-        notes.push("Citizen hit. Leon is out.");
+        notes.push("Citizen hit. Leon is out. The citizen stays.");
       } else if (
         (target.roleKey === "godfather" || target.roleKey === "zodiac") &&
         hasShield(actions, target.id, nightNumber)
       ) {
         shieldBreakIds.push(target.id);
-        notes.push("Shield broken.");
+        notes.push("Shield broken. That player stays.");
       } else if (target.faction === "mafia" || target.roleKey === "zodiac") {
         if (lecterSave === target.id) {
-          notes.push("Lecter saved the Leon target.");
+          notes.push("Lecter saved the Leon target. They stay.");
         } else {
           leave.add(target.id);
+          notes.push("Leon’s shot stands. That player leaves.");
         }
       }
     }
@@ -416,10 +519,17 @@ export function resolveNight(
   const curse = activeJackCurse(actions);
   if (curse && leave.has(curse.playerId)) {
     const jackPlayer = players.find((player) => player.roleKey === "jack");
-    if (jackPlayer && jackPlayer.id !== curse.playerId) leave.add(jackPlayer.id);
+    if (jackPlayer && jackPlayer.id !== curse.playerId) {
+      leave.add(jackPlayer.id);
+      notes.push("The curse victim leaves, so Jack leaves too.");
+    }
   }
 
   const returnIds = constantineId ? [constantineId] : [];
+  if (constantineId) notes.push("Constantine returns a player.");
+  if (leave.size === 0 && returnIds.length === 0 && notes.length === 0) {
+    notes.push("Nobody leaves or returns. No kill or revive was recorded.");
+  }
   return {
     leaveIds: [...leave],
     returnIds,

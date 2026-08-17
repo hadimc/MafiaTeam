@@ -27,8 +27,10 @@ import {
   canReopenScenario,
   eventLane,
   factionLabel,
+  gameOverview,
   isJoinable,
   isRosterOpen,
+  sideLine,
 } from "@/lib/stats";
 
 type Person = { displayName: string; displayNameEn: string };
@@ -60,7 +62,10 @@ type EventPayload = {
   games: {
     id: string;
     status: string;
+    currentDay: number;
     winningFaction: string | null;
+    startedAt: string | null;
+    finishedAt: string | null;
     players: {
       id: string;
       userId: string;
@@ -137,6 +142,7 @@ export function EventView({
   const dealtCards = event.status === "roles_assigned" || live;
   const winner = game?.winningFaction;
   const winnerFaction = winner ? asFaction(winner) : undefined;
+  const overview = game ? gameOverview(game) : null;
   const name = (person: Person) => enName(person);
   const attendees = narrators.length + players.length;
   const dealt = playerCount(qty);
@@ -310,43 +316,56 @@ export function EventView({
         />
       ) : null}
 
-      {past && game?.players.length ? (
-        <Panel>
-          <h2 className="mb-3 text-sm text-muted">{t("results")}</h2>
-          <ol className="space-y-2">
-            {game.players.map((player) => {
-              const faction = asFaction(player.faction);
-              const won = winner && player.faction === winner;
-              return (
-                <li
-                  key={player.id}
-                  className={`flex items-center justify-between gap-3 rounded-2xl bg-bg-elev px-3 py-2.5 ${
-                    player.alive ? "" : "opacity-55"
-                  }`}
-                >
-                  <span className="flex min-w-0 items-center gap-3">
-                    <SeatAvatar
-                      name={name(player.user)}
-                      seat={player.seatNumber}
-                      faction={faction}
-                      alive={player.alive}
-                    />
-                    <span className="min-w-0">
-                      <span className="block truncate">{name(player.user)}</span>
-                      <span className="block truncate text-[11px] text-muted">
-                        {player.roleNameEn || player.roleName}
+      {past && game?.players.length && overview ? (
+        <>
+          <Panel className="space-y-2 text-sm">
+            <h2 className="mb-3 text-sm text-muted">{t("overview")}</h2>
+            <Row label={t("daysPlayed")} value={`${t("day")} ${overview.days}`} />
+            <Row
+              label={t("players")}
+              value={`${overview.seated} ${t("seated").toLowerCase()} · ${overview.living} ${t("stillIn").toLowerCase()} · ${overview.out} ${t("eliminated").toLowerCase()}`}
+            />
+            <Row label={t("stillIn")} value={sideLine(overview.livingBySide)} />
+            <Row label={t("dealtSides")} value={sideLine(overview.dealtBySide)} />
+            {overview.durationLabel ? <Row label={t("duration")} value={overview.durationLabel} /> : null}
+          </Panel>
+          <Panel>
+            <h2 className="mb-3 text-sm text-muted">{t("results")}</h2>
+            <ol className="space-y-2">
+              {game.players.map((player) => {
+                const faction = asFaction(player.faction);
+                const won = winner && player.faction === winner;
+                return (
+                  <li
+                    key={player.id}
+                    className={`flex items-center justify-between gap-3 rounded-2xl bg-bg-elev px-3 py-2.5 ${
+                      player.alive ? "" : "opacity-55"
+                    }`}
+                  >
+                    <span className="flex min-w-0 items-center gap-3">
+                      <SeatAvatar
+                        name={name(player.user)}
+                        seat={player.seatNumber}
+                        faction={faction}
+                        alive={player.alive}
+                      />
+                      <span className="min-w-0">
+                        <span className="block truncate">{name(player.user)}</span>
+                        <span className="block truncate text-[11px] text-muted">
+                          {player.roleNameEn || player.roleName}
+                        </span>
                       </span>
                     </span>
-                  </span>
-                  <span className="flex shrink-0 flex-col items-end gap-1">
-                    {faction ? <FactionPill faction={faction} /> : null}
-                    {won ? <span className="text-[11px] text-gold">{t("won")}</span> : null}
-                  </span>
-                </li>
-              );
-            })}
-          </ol>
-        </Panel>
+                    <span className="flex shrink-0 flex-col items-end gap-1">
+                      {faction ? <FactionPill faction={faction} /> : null}
+                      {won ? <span className="text-[11px] text-gold">{t("won")}</span> : null}
+                    </span>
+                  </li>
+                );
+              })}
+            </ol>
+          </Panel>
+        </>
       ) : null}
 
       {amNarrator && setup && rosterOpen ? (

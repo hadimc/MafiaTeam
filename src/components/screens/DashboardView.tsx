@@ -8,14 +8,17 @@ import type { SessionUser } from "@/lib/auth";
 import { createEventAction, joinEventAction, leaveEventAction } from "@/server/actions/events";
 import { pullDashboardAction } from "@/server/actions/live";
 import { useLivePull } from "@/lib/live";
-import { asFaction, eventLane, factionLabel, isJoinable, type SideWins } from "@/lib/stats";
+import { asFaction, eventLane, factionLabel, gameOverview, isJoinable, sideLine, type SideWins } from "@/lib/stats";
 
 type Person = { displayName: string; displayNameEn: string };
 
 type GameSummary = {
   id: string;
   status: string;
+  currentDay: number;
   winningFaction: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
   players: {
     userId: string;
     roleKey: string;
@@ -24,6 +27,7 @@ type GameSummary = {
     roleDescription: string;
     roleDescriptionEn: string;
     faction: string;
+    alive: boolean;
   }[];
 };
 
@@ -186,8 +190,10 @@ export function DashboardView({
         <h2 className="display text-xl font-semibold">{t("pastNights")}</h2>
         {past.length === 0 ? <p className="text-sm text-muted">{t("noPastNights")}</p> : null}
         {past.map((event) => {
-          const winner = event.games[0]?.winningFaction;
+          const game = event.games[0];
+          const winner = game?.winningFaction;
           const faction = winner ? asFaction(winner) : undefined;
+          const overview = game ? gameOverview(game) : null;
           return (
             <Panel key={event.id} className="space-y-3 p-5">
               <div className="flex items-start justify-between gap-3">
@@ -201,6 +207,11 @@ export function DashboardView({
               {winner ? (
                 <p className="text-sm text-gold">
                   {t("winner")}: {factionLabel(winner)}
+                </p>
+              ) : null}
+              {overview ? (
+                <p className="text-sm text-muted">
+                  {t("day")} {overview.days} · {overview.living} {t("stillIn").toLowerCase()} · {sideLine(overview.livingBySide)}
                 </p>
               ) : null}
               <Button href={`/events/${event.slug}`}>{t("results")}</Button>
