@@ -3,7 +3,7 @@
 import bcrypt from "bcryptjs";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { clearSession, setSession } from "@/lib/auth";
+import { clearSession, safeNextPath, setSession } from "@/lib/auth";
 
 export type AuthState = { error?: string } | null;
 
@@ -26,7 +26,7 @@ export async function loginAction(_prev: AuthState, formData: FormData): Promise
     displayNameEn: user.displayNameEn,
     isAdmin: user.isAdmin,
   });
-  redirect("/dashboard");
+  redirect(safeNextPath(String(formData.get("next") ?? "")));
 }
 
 export async function logoutAction() {

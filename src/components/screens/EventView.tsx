@@ -7,6 +7,7 @@ import { Button, FactionPill, Panel, SeatAvatar, fieldClass } from "@/components
 import { RoleSteppers } from "@/components/RoleSteppers";
 import { RoleReveal } from "@/components/screens/RoleReveal";
 import { Roster, RosterPeek } from "@/components/screens/Roster";
+import { ShareJoinLink } from "@/components/CopyLink";
 import type { SessionUser } from "@/lib/auth";
 import { DEALABLE_ROLES, maxQuantity, playerCount } from "@/lib/catalog";
 import { MAX_NARRATORS, splitRoster } from "@/lib/roster";
@@ -238,6 +239,12 @@ export function EventView({
           })}
         </p>
       </header>
+
+      {user.isAdmin && !past ? (
+        <Panel>
+          <ShareJoinLink slug={event.slug} />
+        </Panel>
+      ) : null}
 
       {setup && joinable ? (
         registered ? (

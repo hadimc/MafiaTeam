@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useLang, enName } from "@/lib/lang";
-import { Button, FactionPill, Panel, SeatAvatar, StatusPill, fieldClass } from "@/components/ui";
+import { Button, FactionPill, Panel, SeatAvatar, StatusPill } from "@/components/ui";
 import type { SessionUser } from "@/lib/auth";
-import { createEventAction, joinEventAction, leaveEventAction } from "@/server/actions/events";
+import { joinEventAction, leaveEventAction } from "@/server/actions/events";
 import { pullDashboardAction } from "@/server/actions/live";
 import { useLivePull } from "@/lib/live";
 import { asFaction, eventLane, factionLabel, gameOverview, isJoinable, sideLine, type SideWins } from "@/lib/stats";
@@ -79,24 +79,12 @@ export function DashboardView({
 }) {
   const { t } = useLang();
   const router = useRouter();
-  const [error, setError] = useState<string | null>(null);
   const [joining, setJoining] = useState<string | null>(null);
   const pull = useCallback((seen: string) => pullDashboardAction(seen), []);
   useLivePull(pull, true);
 
   const open = events.filter((event) => eventLane(event.status) === "open");
   const live = events.filter((event) => eventLane(event.status) === "live");
-  const past = events
-    .filter((event) => eventLane(event.status) === "past")
-    .slice()
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-  async function create(formData: FormData) {
-    setError(null);
-    const result = await createEventAction(formData);
-    if (result?.error) setError(result.error);
-    if (result?.slug) router.push(`/events/${result.slug}`);
-  }
 
   async function join(eventId: string) {
     setJoining(eventId);
@@ -139,127 +127,83 @@ export function DashboardView({
         <Button href={`/games/${myCard.game.id}/role`}>{t("roleReady")}</Button>
       ) : null}
 
-      <section className="grid grid-cols-4 gap-2 text-center">
-        <Stat label={t("nightsPlayed")} value={stats.nights} />
-        <Stat label={t("town")} value={stats.clubWins.citizen} accent="text-citizen" />
-        <Stat label={t("mafia")} value={stats.clubWins.mafia} accent="text-mafia" />
-        <Stat label={t("independent")} value={stats.clubWins.independent} accent="text-indie" />
-      </section>
-
-      <Panel className="space-y-3">
-        <h2 className="display text-lg font-semibold">{t("yourRecord")}</h2>
-        <p className="text-sm text-muted">
-          {stats.me.played} {t("nightsPlayed").toLowerCase()} · {stats.me.wins} {t("wins").toLowerCase()}
-        </p>
-        <div className="flex flex-wrap gap-2 text-xs">
-          <span className="text-citizen">
-            {t("town")} {stats.me.winsBySide.citizen}
-          </span>
-          <span className="text-mafia">
-            {t("mafia")} {stats.me.winsBySide.mafia}
-          </span>
-          <span className="text-indie">
-            {t("independent")} {stats.me.winsBySide.independent}
-          </span>
-        </div>
-      </Panel>
-
-      {live.length ? (
-        <NightList
-          title={t("inPlay")}
-          events={live}
-          userId={user.id}
-          joining={joining}
-          onJoin={join}
-          onLeave={leave}
-          live
-        />
-      ) : null}
-
       <NightList
-        title={t("openNights")}
-        events={open}
+        title={t("newEvent")}
+        events={[...live, ...open]}
         userId={user.id}
         joining={joining}
         onJoin={join}
         onLeave={leave}
-        empty={t("noOpenNights")}
+        empty={t("noNewEvent")}
       />
 
       <section className="space-y-3">
-        <h2 className="display text-xl font-semibold">{t("pastNights")}</h2>
-        {past.length === 0 ? <p className="text-sm text-muted">{t("noPastNights")}</p> : null}
-        {past.map((event) => {
-          const game = event.games[0];
-          const winner = game?.winningFaction;
-          const faction = winner ? asFaction(winner) : undefined;
-          const overview = game ? gameOverview(game) : null;
-          return (
-            <Panel key={event.id} className="space-y-3 p-5">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h3 className="display text-lg font-semibold leading-snug">{event.titleEn || event.title}</h3>
-                  <p className="mt-1 text-sm text-muted">{formatWhen(event.date)}</p>
-                  <p className="text-sm text-muted">{event.locationEn || event.location}</p>
-                </div>
-                {faction ? <FactionPill faction={faction} /> : <StatusPill>{t("results")}</StatusPill>}
-              </div>
-              {winner ? (
-                <p className="text-sm text-gold">
-                  {t("winner")}: {factionLabel(winner)}
-                </p>
-              ) : null}
-              {overview ? (
-                <p className="text-sm text-muted">
-                  {t("day")} {overview.days} · {overview.living} {t("stillIn").toLowerCase()} · {sideLine(overview.livingBySide)}
-                </p>
-              ) : null}
-              <Button href={`/events/${event.slug}`}>{t("results")}</Button>
-            </Panel>
-          );
-        })}
+        <div>
+          <h2 className="display text-xl font-semibold">{t("clubRecords")}</h2>
+          <p className="mt-1 text-sm text-muted">{t("clubWinsHint")}</p>
+        </div>
+        <div className="grid grid-cols-4 gap-2 text-center">
+          <Stat label={t("nightsPlayed")} value={stats.nights} />
+          <Stat label={`${t("town")} ${t("wins")}`} value={stats.clubWins.citizen} accent="text-citizen" />
+          <Stat label={`${t("mafia")} ${t("wins")}`} value={stats.clubWins.mafia} accent="text-mafia" />
+          <Stat label={`${t("independent")} ${t("wins")}`} value={stats.clubWins.independent} accent="text-indie" />
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="display text-xl font-semibold">{t("individualRecords")}</h2>
+        <Panel className="space-y-3">
+          <p className="text-sm text-muted">
+            {stats.me.played} {t("nightsPlayed")} · {stats.me.wins} {t("wins")}
+          </p>
+          <div className="flex flex-wrap gap-2 text-xs">
+            <span className="text-citizen">
+              {t("town")} {stats.me.winsBySide.citizen}
+            </span>
+            <span className="text-mafia">
+              {t("mafia")} {stats.me.winsBySide.mafia}
+            </span>
+            <span className="text-indie">
+              {t("independent")} {stats.me.winsBySide.independent}
+            </span>
+          </div>
+        </Panel>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="display text-xl font-semibold">{t("pastEvents")}</h2>
+        <Button href="/past">{t("openPastEvents")}</Button>
       </section>
 
       {stats.table.length ? (
-        <Panel className="space-y-3">
-          <h2 className="display text-lg font-semibold">{t("clubTable")}</h2>
-          <ol className="space-y-2">
-            {stats.table.slice(0, 10).map((row, i) => (
-              <li
-                key={row.userId}
-                className={`flex items-center justify-between gap-3 rounded-2xl px-3 py-2.5 ${
-                  row.userId === user.id ? "bg-gold/10" : "bg-bg-elev"
-                }`}
-              >
-                <span className="flex min-w-0 items-center gap-3">
-                  <SeatAvatar name={row.name} seat={i + 1} />
-                  <span className="truncate">{row.name}</span>
-                </span>
-                <span className="shrink-0 text-sm text-muted">
-                  {row.wins}W · {row.played - row.wins}L
-                </span>
-              </li>
-            ))}
-          </ol>
-        </Panel>
+        <section className="space-y-3">
+          <h2 className="display text-xl font-semibold">{t("clubTable")}</h2>
+          <Panel className="space-y-2">
+            <ol className="space-y-2">
+              {stats.table.slice(0, 10).map((row, i) => (
+                <li
+                  key={row.userId}
+                  className={`flex items-center justify-between gap-3 rounded-2xl px-3 py-2.5 ${
+                    row.userId === user.id ? "bg-gold/10" : "bg-bg-elev"
+                  }`}
+                >
+                  <span className="flex min-w-0 items-center gap-3">
+                    <SeatAvatar name={row.name} seat={i + 1} />
+                    <span className="truncate">{row.name}</span>
+                  </span>
+                  <span className="shrink-0 text-sm text-muted">
+                    {row.wins}W · {row.played - row.wins}L
+                  </span>
+                </li>
+              ))}
+            </ol>
+          </Panel>
+        </section>
       ) : null}
 
       <Button href="/rules" variant="ghost">
         {t("houseRules")}
       </Button>
-
-      {user.isAdmin ? (
-        <form action={create}>
-          <Panel className="space-y-3">
-            <h2 className="display text-lg font-semibold">{t("hostNight")}</h2>
-            <input name="title" placeholder="Title" className={fieldClass} />
-            <input name="location" placeholder={t("location")} className={fieldClass} />
-            <input name="date" type="datetime-local" className={fieldClass} />
-            {error ? <p className="text-sm text-mafia">{error}</p> : null}
-            <Button type="submit">{t("confirm")}</Button>
-          </Panel>
-        </form>
-      ) : null}
     </div>
   );
 }
@@ -271,7 +215,6 @@ function NightList({
   joining,
   onJoin,
   onLeave,
-  live = false,
   empty,
 }: {
   title: string;
@@ -280,7 +223,6 @@ function NightList({
   joining: string | null;
   onJoin: (id: string) => void;
   onLeave: (id: string) => void;
-  live?: boolean;
   empty?: string;
 }) {
   const { t } = useLang();
@@ -294,6 +236,7 @@ function NightList({
         const gameId = event.games[0]?.id;
         const playerCount = event.registrations.length - event.narrators.length;
         const canJoin = isJoinable(event.status) && !joined;
+        const live = eventLane(event.status) === "live";
         return (
           <Panel key={event.id} className="relative space-y-4 overflow-hidden p-5">
             <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-linear-to-r from-transparent via-gold/70 to-transparent" />
@@ -315,8 +258,7 @@ function NightList({
               </p>
             ) : null}
             <p className="text-xs text-muted">
-              {event.narrators.length} {t("narrators").toLowerCase()} · {Math.max(playerCount, 0)}{" "}
-              {t("players").toLowerCase()}
+              {event.narrators.length} {t("narrators")} · {Math.max(playerCount, 0)} {t("players")}
             </p>
             <div className="grid grid-cols-2 gap-2">
               <Button href={`/events/${event.slug}`} variant="ghost">
@@ -344,6 +286,55 @@ function NightList({
         );
       })}
     </section>
+  );
+}
+
+export function PastEventsView({ events }: { events: EventCard[] }) {
+  const { t } = useLang();
+  const past = events
+    .filter((event) => eventLane(event.status) === "past")
+    .slice()
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  return (
+    <div className="flex flex-1 flex-col gap-6">
+      <Button href="/dashboard" variant="ghost" className="w-auto self-start min-h-10 px-3 text-sm">
+        {t("backToDashboard")}
+      </Button>
+      <header className="pt-1">
+        <h1 className="display text-3xl font-semibold">{t("pastEvents")}</h1>
+      </header>
+      {past.length === 0 ? <p className="text-sm text-muted">{t("noPastNights")}</p> : null}
+      {past.map((event) => {
+        const game = event.games[0];
+        const winner = game?.winningFaction;
+        const faction = winner ? asFaction(winner) : undefined;
+        const overview = game ? gameOverview(game) : null;
+        return (
+          <Panel key={event.id} className="space-y-3 p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="display text-lg font-semibold leading-snug">{event.titleEn || event.title}</h2>
+                <p className="mt-1 text-sm text-muted">{formatWhen(event.date)}</p>
+                <p className="text-sm text-muted">{event.locationEn || event.location}</p>
+              </div>
+              {faction ? <FactionPill faction={faction} /> : <StatusPill>{t("results")}</StatusPill>}
+            </div>
+            {winner ? (
+              <p className="text-sm text-gold">
+                {t("winner")}: {factionLabel(winner)}
+              </p>
+            ) : null}
+            {overview ? (
+              <p className="text-sm text-muted">
+                {t("day")} {overview.days} · {overview.living} {t("stillIn")} · {sideLine(overview.livingBySide)}
+              </p>
+            ) : null}
+            <Button href={`/events/${event.slug}`}>{t("results")}</Button>
+          </Panel>
+        );
+      })}
+    </div>
   );
 }
 
