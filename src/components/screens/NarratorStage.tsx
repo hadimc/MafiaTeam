@@ -11,6 +11,7 @@ import {
   dayTasks,
   jackCurseRound,
   lastNightReport,
+  lecterSelfSaved,
   mafiaLikeOrder,
   mafiaMainTonight,
   nightLine,
@@ -24,6 +25,8 @@ import {
   stageFromGame,
   stageSubtitle,
   stageTitle,
+  sixthSenseGuess,
+  tonightAction,
   tonightPicks,
   tonightTarget,
   townLikeOrder,
@@ -74,7 +77,7 @@ type Game = {
   players: Player[];
   votes: { voteType: string; dayNumber: number; targetPlayerId: string; count: number }[];
   draws: { playerId: string; cardName: string; cardNameEn: string }[];
-  actions: { id: string; actionType: string; messageEn: string; message: string; dayNumber: number; phase: string; targetPlayerId: string | null }[];
+  actions: { id: string; actionType: string; messageEn: string; message: string; dayNumber: number; phase: string; targetPlayerId: string | null; metadata?: string | null }[];
 };
 
 export function NarratorStage({ game }: { game: Game }) {
@@ -107,7 +110,12 @@ export function NarratorStage({ game }: { game: Game }) {
   const tasks =
     stage.kind === "day"
       ? dayTasks(stage, scriptRoles, mayorCoupon?.dayNumber ?? null, livingRoles)
-      : nightTasks(stage, dead.length > 0, lineFor);
+      : nightTasks(
+          stage,
+          dead.length > 0,
+          lineFor,
+          game.actions.find((action) => action.actionType === "faceChange")?.dayNumber ?? null,
+        );
   const name = (player?: Player) => (!player ? "—" : enName(player.user));
   const counts = {
     citizen: living.filter((player) => player.faction === "citizen").length,
@@ -543,8 +551,7 @@ const NIGHT_PICK_LABELS: { key: string; label: string }[] = [
   { key: "matador", label: "Matador block" },
   { key: "watson", label: "Watson save" },
   { key: "leon", label: "Leon shot" },
-  { key: "kane", label: "Kane mark" },
-  { key: "detective", label: "Detective inquiry" },
+  { key: "kane", label: "Kane coupon" },
   { key: "constantine", label: "Constantine" },
   { key: "gunner", label: "Gunner" },
   { key: "jack", label: "Jack curse" },
@@ -947,6 +954,20 @@ function MafiaNight({
   const canShot = living.some((player) => player.faction === "mafia") && blockedRole !== "godfather";
   const canSixth = living.some((player) => player.roleKey === "godfather") && blockedRole !== "godfather";
   const canBuy = living.some((player) => player.roleKey === "saul") && !saulUsed && blockedRole !== "saul";
+  const lecter = living.find((player) => player.roleKey === "lecter");
+  const lecterSelfUsed = Boolean(
+    lecter && lecterSelfSaved(
+      game.actions.filter((action) => action.dayNumber !== game.currentDay),
+      lecter.id,
+    ),
+  );
+  const lecterTargets = living.filter(
+    (player) => player.faction === "mafia" && !(player.roleKey === "lecter" && lecterSelfUsed),
+  );
+  const lecterPick = tonightTarget(game.actions, game.currentDay, "lecter");
+  const sixthAction = tonightAction(game.actions, game.currentDay, "sixthSense");
+  const sixthTarget = sixthAction?.targetPlayerId ?? null;
+  const sixthGuess = sixthSenseGuess(sixthAction);
   const options = [
     ...(canShot ? [{ key: "mafiaShot" as const, label: "Shot" }] : []),
     ...(canSixth ? [{ key: "sixthSense" as const, label: "Sixth sense" }] : []),
@@ -983,14 +1004,67 @@ function MafiaNight({
             {selectedMain ? (
               <div className="mt-3">
                 <PickList
-                  label="Target — tap again to change"
+                  label={
+                    selectedMain === "sixthSense"
+                      ? "Guess — then Cancel, Wrong, or Correct"
+                      : "Target — tap again to change"
+                  }
                   players={living}
                   name={name}
                   selectedId={tonightTarget(game.actions, game.currentDay, selectedMain)}
-                  onPick={(player) =>
-                    recordStageAction(game.id, selectedMain, `Mafia ${selectedMain} → ${name(player)}`, player.id)
-                  }
+                  onPick={(player) => {
+                    void recordStageAction(
+                      game.id,
+                      selectedMain,
+                      `Mafia ${selectedMain} → ${name(player)}`,
+                      player.id,
+                    );
+                  }}
                 />
+                {selectedMain === "sixthSense" && sixthTarget ? (
+                  <div className="mt-2 grid grid-cols-3 gap-2">
+                    <Button
+                      variant="ghost"
+                      className="min-h-9! px-2 text-xs"
+                      onClick={() => {
+                        void clearTonightAction(game.id, "sixthSense");
+                        setMain(null);
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      variant={sixthGuess === "wrong" ? "primary" : "ghost"}
+                      className="min-h-9! px-2 text-xs"
+                      onClick={() =>
+                        void recordStageAction(
+                          game.id,
+                          "sixthSense",
+                          `Sixth sense wrong → ${name(living.find((player) => player.id === sixthTarget))}`,
+                          sixthTarget,
+                          JSON.stringify({ result: "wrong" }),
+                        )
+                      }
+                    >
+                      Wrong
+                    </Button>
+                    <Button
+                      variant={sixthGuess === "correct" ? "primary" : "ghost"}
+                      className="min-h-9! px-2 text-xs"
+                      onClick={() =>
+                        void recordStageAction(
+                          game.id,
+                          "sixthSense",
+                          `Sixth sense correct → ${name(living.find((player) => player.id === sixthTarget))}`,
+                          sixthTarget,
+                          JSON.stringify({ result: "correct" }),
+                        )
+                      }
+                    >
+                      Correct
+                    </Button>
+                  </div>
+                ) : null}
               </div>
             ) : null}
           </>
@@ -1001,13 +1075,17 @@ function MafiaNight({
         line={lineFor("lecter")}
         blocked={blockedRole === "lecter" && blocked ? `${name(blocked)} (${blocked.roleNameEn})` : null}
       >
+        {lecterSelfUsed ? <p className="mb-2 text-xs text-gold">Self-save already used. Lecter cannot save themselves again.</p> : null}
         <PickList
           label="Save — tap again to change"
-          players={living.filter((player) => player.faction === "mafia")}
+          players={lecterTargets}
           name={name}
-          selectedId={tonightTarget(game.actions, game.currentDay, "lecter")}
+          selectedId={lecterPick}
           onPick={(player) => recordStageAction(game.id, "lecter", `Lecter save → ${name(player)}`, player.id)}
         />
+        {lecter && lecterPick === lecter.id ? (
+          <p className="mt-2 text-xs text-gold">Self-save (once). Lecter cannot do this again.</p>
+        ) : null}
       </NightAbility>
       <NightAbility title="Matador disability" line={lineFor("matador")}>
         <PickList
@@ -1057,13 +1135,19 @@ function TownNight({
       .map((action) => action.dayNumber),
   );
   const extras = [
-    { key: "kane", label: "Citizen Kane — mark", cancel: "Cancel mark", players: living, once: true },
-    { key: "detective", label: "Detective — inquiry", cancel: "Cancel inquiry", players: living, once: false },
     { key: "constantine", label: "Constantine — spirit", cancel: null, players: dead, once: true },
     { key: "gunner", label: "Gunner — give gun", cancel: null, players: living, once: false },
   ] as const;
+  const kane = living.find((player) => player.roleKey === "kane");
+  const kaneUsed = game.actions.some(
+    (action) => action.actionType === "kane" && action.dayNumber !== game.currentDay,
+  );
+  const kaneTarget = tonightTarget(game.actions, game.currentDay, "kane");
+  const kaneLine = lineFor("kane");
+  const detectiveLine = lineFor("detective");
   const leonTarget = tonightTarget(game.actions, game.currentDay, "leon");
   const preview = resolveNight(game.actions, game.players, game.currentDay);
+  const kaneNotes = preview.notes.filter((note) => /kane/i.test(note));
   const leonNotes = preview.notes.filter((note) => /leon|citizen hit|lecter|shield/i.test(note));
   const leonLine = lineFor("leon");
   const leonSpent = leonNights.size >= 2;
@@ -1121,6 +1205,50 @@ function TownNight({
               ))}
             </>
           )}
+        </div>
+      )}
+      {kaneLine === "skip" ? null : (
+        <div>
+          <p className="mb-2 text-[11px] uppercase tracking-wide text-muted">Citizen Kane — coupon</p>
+          {kaneLine === "cover" || kaneUsed || !kane ? (
+            <p className="text-xs text-muted">
+              {kaneUsed ? "Coupon already used. Still say the line." : "Say the line. Nothing to record."}
+            </p>
+          ) : blockedRole === "kane" && blockedWho ? (
+            <CannotActNote who={blockedWho} />
+          ) : (
+            <>
+              <PickList
+                label="Target — tap the name again to cancel"
+                players={living.filter((player) => player.id !== kane.id)}
+                name={name}
+                selectedId={kaneTarget}
+                onPick={(player) => {
+                  if (kaneTarget === player.id) {
+                    void clearTonightAction(game.id, "kane");
+                    return;
+                  }
+                  void recordStageAction(game.id, "kane", `Kane coupon → ${name(player)}`, player.id);
+                }}
+              />
+              {kaneTarget ? (
+                <Button variant="ghost" className="mt-2" onClick={() => clearTonightAction(game.id, "kane")}>
+                  Cancel coupon
+                </Button>
+              ) : null}
+              {kaneNotes.map((note) => (
+                <p key={note} className="mt-2 text-xs text-gold">
+                  {note}
+                </p>
+              ))}
+            </>
+          )}
+        </div>
+      )}
+      {detectiveLine === "skip" ? null : (
+        <div>
+          <p className="mb-2 text-[11px] uppercase tracking-wide text-muted">Detective</p>
+          <p className="text-xs text-muted">Say the line. Do not record the inquiry.</p>
         </div>
       )}
       {extras.map((item) => {
@@ -1187,17 +1315,17 @@ function FaceChange({
   if (used) {
     return (
       <div className="space-y-3">
-        <p className="text-sm text-gold">Face-off used. Only one completed swap per game.</p>
+        <p className="text-sm text-gold">Face-off used. Cancel only tonight if this swap was a mistake.</p>
         <p className="text-sm">{used.messageEn}</p>
         <Button variant="ghost" onClick={() => resetFaceChangeAction(gameId)}>
-          Reset Face-off
+          Cancel Face-off
         </Button>
       </div>
     );
   }
   return (
     <div className="space-y-4">
-      <p className="text-xs text-gold">Pick exactly one from each list, then swap. Reset if this was a mistake.</p>
+      <p className="text-xs text-gold">Pick exactly one from each list, then swap. Cancel tonight if this was a mistake.</p>
       <PickList
         label="Outside — pick one (eliminated)"
         players={dead}

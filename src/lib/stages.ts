@@ -94,7 +94,7 @@ const NIGHT_TASKS: StageTask[] = [
     nameEn: "Face-off",
     nameFa: "تغییر چهره",
     summaryEn: "One Face-off only: pick one player outside and one player inside. Their roles swap.",
-    notesEn: "Outside = eliminated. Inside = still seated. Jack’s curse stays on the person, not the card. Reset if you swapped the wrong pair.",
+    notesEn: "Outside = eliminated. Inside = still seated. Jack’s curse stays on the person, not the card. Cancel only on the night of the swap. After that, this step does not appear again.",
   },
   {
     key: "nostradamus",
@@ -115,14 +115,14 @@ const NIGHT_TASKS: StageTask[] = [
     nameEn: "Mafia",
     nameFa: "عملیات مافیا",
     summaryEn: "Say the lines for Mafia roles that are in this scenario. Main action is one of: shot, sixth sense, or purchase. Then Lecter save and Matador block if those roles exist.",
-    notesEn: "Night 1+. Skip roles that were never in this scenario. If a dealt role is out but not publicly known, still say the wake line. Do not record an ability after its holder has left: no sixth sense without Godfather, no purchase without Saul, no Lecter save, no Matador block. Tap again to correct a target. Nobody leaves until the night ends.",
+    notesEn: "Night 1+. Skip roles that were never in this scenario. If a dealt role is out but not publicly known, still say the wake line. Do not record an ability after its holder has left: no sixth sense without Godfather, no purchase without Saul, no Lecter save, no Matador block. Lecter may self-save once. Tap again to correct a target. Nobody leaves until the night ends.",
   },
   {
     key: "town",
     nameEn: "Citizen",
     nameFa: "عملیات شهر",
-    summaryEn: "Say the town lines for roles in this scenario. Record Watson’s save and Leon’s shot when they act.",
-    notesEn: "Night 1+. Skip roles that were never in the scenario. If a dealt role is out but not publicly known, still say the line. Watson may self-save once. Removals wait until you go to the next day.",
+    summaryEn: "Say the town lines for roles in this scenario. Record Watson’s save, Leon’s shot, and Kane’s coupon. Do not record the Detective inquiry.",
+    notesEn: "Night 1+. Skip roles that were never in the scenario. If a dealt role is out but not publicly known, still say the line. Watson may self-save once. Kane has one coupon: citizen does nothing, Mafia means Kane leaves the next night. Removals wait until you go to the next day.",
   },
   {
     key: "nightEnd",
@@ -153,12 +153,13 @@ export function publicPlayerIds(actions: { actionType: string; targetPlayerId?: 
 export function nightLine(
   roleKey: string,
   scenarioKeys: Set<string>,
-  players: { id: string; roleKey: string; alive: boolean }[],
+  players: { id: string; roleKey: string; alive: boolean; faction?: string }[],
   publicIds: Set<string>,
 ): NightLine {
   if (!scenarioKeys.has(roleKey)) return "skip";
   const holders = players.filter((player) => player.roleKey === roleKey);
   if (holders.some((player) => player.alive)) return "record";
+  if (holders.length > 0 && holders.every((player) => player.faction === "independent")) return "skip";
   if (holders.length > 0 && holders.every((player) => publicIds.has(player.id))) return "skip";
   return "cover";
 }
@@ -233,11 +234,16 @@ export function nightTasks(
   stage: Stage,
   hasDead: boolean,
   line: (roleKey: string) => NightLine,
+  faceChangeDay: number | null = null,
 ) {
   const anyMafia = MAFIA_LIKE_ORDER.some((key) => line(key) !== "skip");
   const anyTown = TOWN_LIKE_ORDER.some((key) => line(key) !== "skip");
   return NIGHT_TASKS.filter((task) => {
-    if (task.key === "faceChange") return stage.n >= 1 && hasDead;
+    if (task.key === "faceChange") {
+      if (stage.n < 1 || !hasDead) return false;
+      if (faceChangeDay != null && faceChangeDay !== stage.n) return false;
+      return true;
+    }
     if (task.key === "nostradamus") return stage.n === 0 && line("nostradamus") !== "skip";
     if (task.key === "jack") return line("jack") !== "skip";
     if (task.key === "mafia") return anyMafia;
@@ -345,6 +351,7 @@ export type NightPickAction = {
   dayNumber: number;
   phase?: string | null;
   targetPlayerId?: string | null;
+  metadata?: string | null;
 };
 
 export type NightPlayer = {
@@ -400,6 +407,28 @@ export function tonightTarget(actions: NightPickAction[], dayNumber: number, act
   return tonightPicks(actions, dayNumber).get(actionType) ?? null;
 }
 
+export function tonightAction(actions: NightPickAction[], dayNumber: number, actionType: string) {
+  let found: NightPickAction | null = null;
+  for (const action of actions) {
+    if (action.dayNumber !== dayNumber) continue;
+    if (action.phase && !NIGHT_PHASES.has(action.phase)) continue;
+    if (action.actionType !== actionType) continue;
+    found = action;
+  }
+  return found;
+}
+
+export function sixthSenseGuess(action?: NightPickAction | null): "correct" | "wrong" | null {
+  if (!action?.metadata) return null;
+  try {
+    const meta = JSON.parse(action.metadata) as { result?: string };
+    if (meta.result === "correct" || meta.result === "wrong") return meta.result;
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 export function resolveNight(
   actions: NightPickAction[],
   players: NightPlayer[],
@@ -437,6 +466,7 @@ export function resolveNight(
     matador: "Matador is out. That block does not apply.",
     watson: "Watson is out. That save does not apply.",
     leon: "Leon is out. That shot does not apply.",
+    kane: "Kane is out. That coupon does not apply.",
     constantine: "Constantine is out. Nobody returns.",
   };
   for (const actionType of dropped) {
@@ -452,6 +482,9 @@ export function resolveNight(
   }
   if (blockedRole === "lecter" && picks.get("lecter")) {
     notes.push("Matador blocked Lecter. That save does not apply.");
+  }
+  if (blockedRole === "kane" && picks.get("kane")) {
+    notes.push("Matador blocked Kane. That coupon does not apply.");
   }
   if (blockedRole === "constantine" && picks.get("constantine")) {
     notes.push("Matador blocked Constantine. Nobody returns.");
@@ -482,11 +515,14 @@ export function resolveNight(
 
   if (sixthId) {
     const target = byId.get(sixthId);
-    if (target && target.faction === "independent" && !immune(target)) {
+    const guess = sixthSenseGuess(tonightAction(actions, nightNumber, "sixthSense"));
+    if (target && guess === "correct") {
       leave.add(target.id);
-      notes.push("Sixth sense found an independent. That player leaves.");
+      notes.push("Sixth sense confirmed. That player leaves.");
+    } else if (target && guess === "wrong") {
+      notes.push("Sixth sense was a wrong guess. That player stays.");
     } else if (target) {
-      notes.push("Sixth sense did not remove anyone.");
+      notes.push("Sixth sense recorded. Mark Correct or Wrong.");
     }
   }
 
@@ -516,10 +552,33 @@ export function resolveNight(
     }
   }
 
+  const kanePlayer = players.find((player) => player.roleKey === "kane");
+  const kaneTargetId = ability("kane", "kane");
+  if (kaneTargetId && kanePlayer) {
+    const target = byId.get(kaneTargetId);
+    if (target?.faction === "mafia") {
+      notes.push("Kane coupon used on Mafia. Kane leaves the following night.");
+    } else if (target) {
+      notes.push("Kane coupon used. Target is not Mafia. Nothing happens.");
+    }
+  }
+
+  if (nightNumber >= 2 && kanePlayer && kanePlayer.alive !== false) {
+    const prev = tonightPicks(actions, nightNumber - 1);
+    const prevKaneTargetId = prev.get("matador") === kanePlayer.id ? undefined : prev.get("kane");
+    if (prevKaneTargetId) {
+      const marked = byId.get(prevKaneTargetId);
+      if (marked?.faction === "mafia") {
+        leave.add(kanePlayer.id);
+        notes.push("Kane sat with Mafia last night. Kane leaves.");
+      }
+    }
+  }
+
   const curse = activeJackCurse(actions);
   if (curse && leave.has(curse.playerId)) {
     const jackPlayer = players.find((player) => player.roleKey === "jack");
-    if (jackPlayer && jackPlayer.id !== curse.playerId) {
+    if (jackPlayer && jackPlayer.alive !== false && jackPlayer.id !== curse.playerId) {
       leave.add(jackPlayer.id);
       notes.push("The curse victim leaves, so Jack leaves too.");
     }
@@ -564,6 +623,13 @@ export function watsonSelfSaved(
   watsonId: string,
 ) {
   return actions.some((action) => action.actionType === "watson" && action.targetPlayerId === watsonId);
+}
+
+export function lecterSelfSaved(
+  actions: { actionType: string; targetPlayerId?: string | null }[],
+  lecterId: string,
+) {
+  return actions.some((action) => action.actionType === "lecter" && action.targetPlayerId === lecterId);
 }
 
 export function mafiaMainTonight(

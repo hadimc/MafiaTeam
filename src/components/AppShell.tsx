@@ -33,11 +33,19 @@ export function AppShell({
               <span className="display text-[15px] font-semibold text-ink">MafiaTeam</span>
             </Link>
             {user ? (
-              <form action={logoutAction}>
-                <button type="submit" className="text-xs text-muted">
-                  {enName(user)} · {t("logout")}
-                </button>
-              </form>
+              <div className="flex items-center gap-3">
+                <Link
+                  href="/profile"
+                  className={`text-xs ${path === "/profile" ? "text-gold" : "text-muted"}`}
+                >
+                  {enName(user)}
+                </Link>
+                <form action={logoutAction}>
+                  <button type="submit" className="text-xs text-muted">
+                    {t("logout")}
+                  </button>
+                </form>
+              </div>
             ) : (
               <span className="text-xs text-muted">Sign in</span>
             )}

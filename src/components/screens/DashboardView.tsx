@@ -216,9 +216,14 @@ export function DashboardView({
         </section>
       ) : null}
 
-      <Button href="/rules" variant="ghost">
-        {t("houseRules")}
-      </Button>
+      <div className="grid grid-cols-2 gap-2">
+        <Button href="/profile" variant="ghost">
+          {t("profile")}
+        </Button>
+        <Button href="/rules" variant="ghost">
+          {t("houseRules")}
+        </Button>
+      </div>
     </div>
   );
 }

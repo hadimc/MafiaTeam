@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { nightLine, resolveNight } from "./stages";
+import { nightLine, nightTasks, resolveNight } from "./stages";
 
 type P = {
   id: string;
@@ -20,8 +20,8 @@ const lecter = player("c", "lecter", "mafia");
 const jack = player("j", "jack", "independent");
 const matador = player("m", "matador", "mafia");
 
-function act(type: string, target: string, day = 1) {
-  return { actionType: type, dayNumber: day, phase: "night", targetPlayerId: target };
+function act(type: string, target: string, day = 1, metadata?: string) {
+  return { actionType: type, dayNumber: day, phase: "night", targetPlayerId: target, metadata };
 }
 
 test("mafia shot without a Watson save removes the target at night end", () => {
@@ -112,10 +112,27 @@ test("empty night explains why nobody leaves", () => {
   assert.equal(result.notes.some((note) => /nobody/i.test(note)), true);
 });
 
-test("sixth sense removes a non-immune independent when Godfather is alive", () => {
+test("sixth sense does not remove anyone until marked Correct", () => {
   const godfather = player("g", "godfather", "mafia");
   const indie = player("z", "zodiac", "independent");
-  const result = resolveNight([act("sixthSense", indie.id)], [godfather, indie], 1);
+  const pending = resolveNight([act("sixthSense", indie.id)], [godfather, indie], 1);
+  assert.deepEqual(pending.leaveIds, []);
+  const wrong = resolveNight(
+    [act("sixthSense", indie.id, 1, JSON.stringify({ result: "wrong" }))],
+    [godfather, indie],
+    1,
+  );
+  assert.deepEqual(wrong.leaveIds, []);
+});
+
+test("sixth sense removes the guessed player when marked Correct", () => {
+  const godfather = player("g", "godfather", "mafia");
+  const indie = player("z", "zodiac", "independent");
+  const result = resolveNight(
+    [act("sixthSense", indie.id, 1, JSON.stringify({ result: "correct" }))],
+    [godfather, indie],
+    1,
+  );
   assert.deepEqual(result.leaveIds, [indie.id]);
 });
 
@@ -182,4 +199,82 @@ test("night line skips a dealt role once it is publicly shown out", () => {
 test("night line records while the role is still alive", () => {
   const scenario = new Set(["lecter"]);
   assert.equal(nightLine("lecter", scenario, [lecter], new Set()), "record");
+});
+
+test("night line skips an independent once they are out", () => {
+  const scenario = new Set(["jack"]);
+  const deadJack = { ...jack, alive: false };
+  assert.equal(nightLine("jack", scenario, [deadJack], new Set()), "skip");
+});
+
+test("Face-off stays on the night it happened and is hidden later", () => {
+  const line = () => "skip" as const;
+  const keys = (n: number, usedOn: number | null) =>
+    nightTasks({ kind: "night", n }, true, line, usedOn).map((task) => task.key);
+  assert.equal(keys(1, null).includes("faceChange"), true);
+  assert.equal(keys(1, 1).includes("faceChange"), true);
+  assert.equal(keys(2, 1).includes("faceChange"), false);
+});
+
+test("Kane coupon on a citizen does nothing that night", () => {
+  const kane = player("k", "kane", "citizen");
+  const result = resolveNight([act("kane", villager.id)], [kane, villager], 1);
+  assert.deepEqual(result.leaveIds, []);
+  assert.equal(result.notes.some((note) => /not mafia/i.test(note)), true);
+});
+
+test("Kane coupon on mafia does not remove Kane that night", () => {
+  const kane = player("k", "kane", "citizen");
+  const result = resolveNight([act("kane", lecter.id)], [kane, lecter], 1);
+  assert.deepEqual(result.leaveIds, []);
+  assert.equal(result.notes.some((note) => /following night/i.test(note)), true);
+});
+
+test("Kane leaves the night after marking mafia", () => {
+  const kane = player("k", "kane", "citizen");
+  const result = resolveNight([act("kane", lecter.id, 1)], [kane, lecter], 2);
+  assert.deepEqual(result.leaveIds, [kane.id]);
+});
+
+test("Kane does not leave the night after marking a citizen", () => {
+  const kane = player("k", "kane", "citizen");
+  const result = resolveNight([act("kane", villager.id, 1)], [kane, villager], 2);
+  assert.deepEqual(result.leaveIds, []);
+});
+
+test("Matador blocking Kane last night prevents the delayed leave", () => {
+  const kane = player("k", "kane", "citizen");
+  const result = resolveNight(
+    [act("kane", lecter.id, 1), act("matador", kane.id, 1)],
+    [kane, lecter, matador],
+    2,
+  );
+  assert.deepEqual(result.leaveIds, []);
+});
+
+test("Kane already out does not leave again the night after a mafia coupon", () => {
+  const kane = { ...player("k", "kane", "citizen"), alive: false };
+  const result = resolveNight([act("kane", lecter.id, 1)], [kane, lecter], 2);
+  assert.deepEqual(result.leaveIds, []);
+});
+
+test("Jack curse takes Jack out when the cursed player leaves", () => {
+  const result = resolveNight(
+    [act("jack", villager.id), act("mafiaShot", villager.id)],
+    [jack, villager, watson],
+    1,
+  );
+  assert.deepEqual(result.leaveIds.sort(), [jack.id, villager.id].sort());
+  assert.equal(result.notes.some((note) => /jack leaves/i.test(note)), true);
+});
+
+test("Jack already out does not leave again when the cursed player leaves", () => {
+  const deadJack = { ...jack, alive: false };
+  const result = resolveNight(
+    [act("jack", villager.id), act("mafiaShot", villager.id)],
+    [deadJack, villager, watson],
+    1,
+  );
+  assert.deepEqual(result.leaveIds, [villager.id]);
+  assert.equal(result.notes.some((note) => /jack leaves/i.test(note)), false);
 });

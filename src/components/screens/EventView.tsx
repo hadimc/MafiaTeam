@@ -20,7 +20,7 @@ import {
   selectScenarioAction,
   switchSeatAction,
 } from "@/server/actions/events";
-import { dealRolesAction } from "@/server/actions/games";
+import { dealRolesAction, closeGameAction, endGameAction, resetGameAction } from "@/server/actions/games";
 import { pullEventAction } from "@/server/actions/live";
 import {
   asFaction,
@@ -118,6 +118,7 @@ export function EventView({
   const [qty, setQty] = useState(() => qtyFrom(scenarios.find((s) => s.id === event.scenarioId)));
   const [cardOpen, setCardOpen] = useState(false);
   const [warnReset, setWarnReset] = useState(false);
+  const [adminDanger, setAdminDanger] = useState<null | "end" | "reset">(null);
   const shownCard = useRef<string | null>(null);
 
   const pull = useCallback((seen: string) => pullEventAction(event.id, seen), [event.id]);
@@ -294,6 +295,68 @@ export function EventView({
         ) : null}
       </Panel>
 
+      {user.isAdmin && game && (!amNarrator || past) ? (
+        adminDanger === "end" ? (
+          <Panel className="space-y-3">
+            <p className="text-sm text-muted">{past ? t("changeResultWarn") : t("gameOverWarn")}</p>
+            <Button
+              onClick={() => {
+                setAdminDanger(null);
+                void endGameAction(game.id, "citizen").then(() => router.refresh());
+              }}
+              variant="danger"
+            >
+              {t("townWins")}
+            </Button>
+            <Button
+              onClick={() => {
+                setAdminDanger(null);
+                void endGameAction(game.id, "mafia").then(() => router.refresh());
+              }}
+              variant="danger"
+            >
+              {t("mafiaWins")}
+            </Button>
+            <Button
+              onClick={() => {
+                setAdminDanger(null);
+                void endGameAction(game.id, "independent").then(() => router.refresh());
+              }}
+              variant="danger"
+            >
+              {t("independentWins")}
+            </Button>
+            <Button onClick={() => setAdminDanger(null)} variant="ghost">
+              {t("cancel")}
+            </Button>
+          </Panel>
+        ) : adminDanger === "reset" ? (
+          <Panel className="space-y-3">
+            <p className="text-sm text-muted">{t("resetGameWarn")}</p>
+            <Button onClick={() => resetGameAction(game.id)} variant="danger">
+              {t("yesResetGame")}
+            </Button>
+            <Button onClick={() => setAdminDanger(null)} variant="ghost">
+              {t("cancel")}
+            </Button>
+          </Panel>
+        ) : (
+          <div className="space-y-2">
+            {winner && !past ? (
+              <Button onClick={() => closeGameAction(game.id)}>{t("closeGame")}</Button>
+            ) : null}
+            <div className="grid grid-cols-2 gap-2">
+              <Button onClick={() => setAdminDanger("end")} variant="ghost">
+                {winner ? t("changeWinner") : t("gameOver")}
+              </Button>
+              <Button onClick={() => setAdminDanger("reset")} variant="ghost">
+                {t("resetGame")}
+              </Button>
+            </div>
+          </div>
+        )
+      ) : null}
+
       {!past && amNarrator ? (
         <>
           <Roster
@@ -460,7 +523,7 @@ export function EventView({
         <Button onClick={() => setCardOpen(true)}>{t("roleReady")}</Button>
       ) : null}
 
-      {amNarrator && gameId && (live || event.status === "roles_assigned") ? (
+      {(amNarrator || user.isAdmin) && gameId && (live || event.status === "roles_assigned") ? (
         <Button href={`/games/${gameId}/narrator`}>{t("asNarrator")}</Button>
       ) : null}
 
