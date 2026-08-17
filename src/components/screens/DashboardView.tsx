@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useLang, enName } from "@/lib/lang";
 import { Button, FactionPill, Panel, SeatAvatar, StatusPill } from "@/components/ui";
@@ -80,6 +80,7 @@ export function DashboardView({
   const { t } = useLang();
   const router = useRouter();
   const [joining, setJoining] = useState<string | null>(null);
+  const [recordView, setRecordView] = useState<"individual" | "club">("individual");
   const pull = useCallback((seen: string) => pullDashboardAction(seen), []);
   useLivePull(pull, true);
 
@@ -138,36 +139,50 @@ export function DashboardView({
       />
 
       <section className="space-y-3">
-        <div>
-          <h2 className="display text-xl font-semibold">{t("clubRecords")}</h2>
-          <p className="mt-1 text-sm text-muted">{t("clubWinsHint")}</p>
+        <h2 className="display text-xl font-semibold">{t("records")}</h2>
+        <div className="grid grid-cols-2 gap-1 rounded-full border border-line bg-card/80 p-1">
+          <button
+            type="button"
+            onClick={() => setRecordView("individual")}
+            className={`rounded-full py-2 text-center text-xs font-semibold tracking-wide ${
+              recordView === "individual" ? "bg-gold text-black" : "text-muted"
+            }`}
+          >
+            {t("individual")}
+          </button>
+          <button
+            type="button"
+            onClick={() => setRecordView("club")}
+            className={`rounded-full py-2 text-center text-xs font-semibold tracking-wide ${
+              recordView === "club" ? "bg-gold text-black" : "text-muted"
+            }`}
+          >
+            {t("club")}
+          </button>
         </div>
-        <div className="grid grid-cols-4 gap-2 text-center">
-          <Stat label={t("nightsPlayed")} value={stats.nights} />
-          <Stat label={`${t("town")} ${t("wins")}`} value={stats.clubWins.citizen} accent="text-citizen" />
-          <Stat label={`${t("mafia")} ${t("wins")}`} value={stats.clubWins.mafia} accent="text-mafia" />
-          <Stat label={`${t("independent")} ${t("wins")}`} value={stats.clubWins.independent} accent="text-indie" />
-        </div>
-      </section>
-
-      <section className="space-y-3">
-        <h2 className="display text-xl font-semibold">{t("individualRecords")}</h2>
-        <Panel className="space-y-3">
-          <p className="text-sm text-muted">
-            {stats.me.played} {t("nightsPlayed")} · {stats.me.wins} {t("wins")}
-          </p>
-          <div className="flex flex-wrap gap-2 text-xs">
-            <span className="text-citizen">
-              {t("town")} {stats.me.winsBySide.citizen}
-            </span>
-            <span className="text-mafia">
-              {t("mafia")} {stats.me.winsBySide.mafia}
-            </span>
-            <span className="text-indie">
-              {t("independent")} {stats.me.winsBySide.independent}
-            </span>
-          </div>
-        </Panel>
+        {recordView === "club" ? (
+          <>
+            <p className="text-sm text-muted">{t("clubWinsHint")}</p>
+            <div className="grid grid-cols-4 gap-2 text-center">
+              <Stat icon={<MoonIcon />} label={t("nightsPlayed")} value={stats.nights} />
+              <Stat icon={<TownIcon />} label={t("townWins")} value={stats.clubWins.citizen} accent="text-citizen" />
+              <Stat icon={<MafiaIcon />} label={t("mafiaWins")} value={stats.clubWins.mafia} accent="text-mafia" />
+              <Stat icon={<IndieIcon />} label={t("independentWins")} value={stats.clubWins.independent} accent="text-indie" />
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 gap-2 text-center">
+              <Stat icon={<MoonIcon />} label={t("nightsPlayed")} value={stats.me.played} />
+              <Stat icon={<TrophyIcon />} label={t("wins")} value={stats.me.wins} accent="text-gold" />
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <Stat icon={<TownIcon />} label={t("townWins")} value={stats.me.winsBySide.citizen} accent="text-citizen" />
+              <Stat icon={<MafiaIcon />} label={t("mafiaWins")} value={stats.me.winsBySide.mafia} accent="text-mafia" />
+              <Stat icon={<IndieIcon />} label={t("independentWins")} value={stats.me.winsBySide.independent} accent="text-indie" />
+            </div>
+          </>
+        )}
       </section>
 
       <section className="space-y-3">
@@ -238,46 +253,56 @@ function NightList({
         const canJoin = isJoinable(event.status) && !joined;
         const live = eventLane(event.status) === "live";
         return (
-          <Panel key={event.id} className="relative space-y-4 overflow-hidden p-5">
-            <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-linear-to-r from-transparent via-gold/70 to-transparent" />
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h3 className="display text-xl font-semibold leading-snug">{event.titleEn || event.title}</h3>
-                <p className="mt-2 text-sm text-muted">{formatWhen(event.date)}</p>
-                <p className="text-sm text-muted">{event.locationEn || event.location}</p>
+          <Panel key={event.id} className="relative space-y-2 overflow-hidden p-3">
+            <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-linear-to-r from-transparent via-gold/70 to-transparent" />
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <h3 className="display text-base font-semibold leading-snug">{event.titleEn || event.title}</h3>
+                <p className="mt-0.5 text-xs text-muted">
+                  {formatWhen(event.date)} · {event.locationEn || event.location}
+                </p>
               </div>
               <StatusPill>{live ? t("inPlay") : t("eventSetup")}</StatusPill>
             </div>
             {isNarrator ? (
-              <p className="rounded-2xl border border-gold/20 bg-gold/10 px-3 py-2 text-sm text-gold">
-                {t("youAreNarrator")}
-              </p>
+              <p className="text-xs text-gold">{t("youAreNarrator")}</p>
             ) : joined ? (
-              <p className="rounded-2xl border border-citizen/20 bg-citizen/10 px-3 py-2 text-sm text-citizen">
-                {t("joined")}
-              </p>
+              <p className="text-xs text-citizen">{t("joined")}</p>
             ) : null}
-            <p className="text-xs text-muted">
+            <p className="text-[11px] text-muted">
               {event.narrators.length} {t("narrators")} · {Math.max(playerCount, 0)} {t("players")}
             </p>
-            <div className="grid grid-cols-2 gap-2">
-              <Button href={`/events/${event.slug}`} variant="ghost">
+            <div className="grid grid-cols-2 gap-1.5">
+              <Button href={`/events/${event.slug}`} variant="ghost" className="min-h-9! text-xs">
                 {t("openEvent")}
               </Button>
               {live && isNarrator && gameId ? (
-                <Button href={`/games/${gameId}/narrator`}>{t("asNarrator")}</Button>
+                <Button href={`/games/${gameId}/narrator`} className="min-h-9! text-xs">
+                  {t("asNarrator")}
+                </Button>
               ) : live && gameId && joined && !isNarrator ? (
-                <Button href={`/games/${gameId}/role`}>{t("revealRole")}</Button>
+                <Button href={`/games/${gameId}/role`} className="min-h-9! text-xs">
+                  {t("revealRole")}
+                </Button>
               ) : canJoin ? (
-                <Button onClick={() => onJoin(event.id)} disabled={joining === event.id}>
+                <Button onClick={() => onJoin(event.id)} disabled={joining === event.id} className="min-h-9! text-xs">
                   {t("join")}
                 </Button>
               ) : joined && isJoinable(event.status) ? (
-                <Button onClick={() => onLeave(event.id)} variant="ghost" disabled={joining === event.id}>
+                <Button
+                  onClick={() => onLeave(event.id)}
+                  variant="ghost"
+                  disabled={joining === event.id}
+                  className="min-h-9! text-xs"
+                >
                   {t("leave")}
                 </Button>
               ) : (
-                <Button href={`/events/${event.slug}`} variant={joined ? "ghost" : "primary"}>
+                <Button
+                  href={`/events/${event.slug}`}
+                  variant={joined ? "ghost" : "primary"}
+                  className="min-h-9! text-xs"
+                >
                   {joined ? t("joined") : t("join")}
                 </Button>
               )}
@@ -338,11 +363,74 @@ export function PastEventsView({ events }: { events: EventCard[] }) {
   );
 }
 
-function Stat({ label, value, accent }: { label: string; value: number; accent?: string }) {
+function Stat({
+  label,
+  value,
+  accent,
+  icon,
+}: {
+  label: string;
+  value: number;
+  accent?: string;
+  icon: ReactNode;
+}) {
   return (
-    <div className="rounded-2xl border border-line bg-card/80 py-3">
-      <div className={`text-xl font-semibold ${accent ?? ""}`}>{value}</div>
-      <div className="mt-1 text-[10px] uppercase tracking-wide text-muted">{label}</div>
+    <div className="flex flex-col items-center rounded-2xl border border-line bg-card/80 px-1 py-3">
+      <span className={`flex h-6 w-6 items-center justify-center ${accent ?? "text-gold"}`}>{icon}</span>
+      <div className={`mt-1.5 text-xl font-semibold ${accent ?? ""}`}>{value}</div>
+      <div className="mt-1 text-[9px] uppercase leading-tight tracking-wide text-muted">{label}</div>
     </div>
+  );
+}
+
+function MoonIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-full w-full" aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M20 15.2A7.4 7.4 0 0 1 8.8 4 8 8 0 1 0 20 15.2Z" />
+    </svg>
+  );
+}
+
+function TrophyIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-full w-full" aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M8 5h8v3.5A4 4 0 0 1 12 12.5 4 4 0 0 1 8 8.5V5Z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7H6a2.5 2.5 0 0 0 2.5 2.5M16 7h2a2.5 2.5 0 0 1-2.5 2.5" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 12.5V15M9 19h6M10 15h4v4h-4z" />
+    </svg>
+  );
+}
+
+function TownIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-full w-full" aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4 11 12 4l8 7v9H4v-9Z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M10 20v-6h4v6" />
+    </svg>
+  );
+}
+
+function MafiaIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-full w-full" aria-hidden>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M4 10.5c0-1.5 3.6-3.5 8-3.5s8 2 8 3.5c0 4-3.2 7-8 7s-8-3-8-7Z"
+      />
+      <path strokeLinecap="round" d="M8.2 11.2c.6 0 1 .4 1 .9s-.4.9-1 .9-1-.4-1-.9.4-.9 1-.9ZM15.8 11.2c.6 0 1 .4 1 .9s-.4.9-1 .9-1-.4-1-.9.4-.9 1-.9Z" />
+    </svg>
+  );
+}
+
+function IndieIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-full w-full" aria-hidden>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M12 4.5 13.6 9h4.7l-3.8 2.9 1.5 4.6L12 13.8 8 16.5l1.5-4.6L5.7 9h4.7L12 4.5Z"
+      />
+    </svg>
   );
 }

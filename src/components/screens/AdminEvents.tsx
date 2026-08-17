@@ -47,8 +47,6 @@ export function AdminEvents({
 
   return (
     <div className="flex flex-1 flex-col gap-4">
-      <h1 className="display text-2xl font-semibold">{t("events")}</h1>
-
       {creating ? (
         <form action={create}>
           <Panel className="space-y-3">

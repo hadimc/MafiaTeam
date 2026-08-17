@@ -23,8 +23,8 @@ export function AdminNav() {
           <Link
             key={item.href}
             href={item.href}
-            className={`rounded-xl px-1 py-2.5 text-center text-[11px] tracking-wide ${
-              active ? "bg-gold text-black font-semibold" : "text-muted"
+            className={`display rounded-xl px-1 py-3 text-center text-sm font-semibold tracking-[0.12em] ${
+              active ? "bg-gold text-black" : "text-muted"
             }`}
           >
             {t(item.key)}

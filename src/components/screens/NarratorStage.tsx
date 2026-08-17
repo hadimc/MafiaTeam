@@ -666,13 +666,13 @@ function InquiryReport({
       <div>
         <p className="mb-1 text-[11px] uppercase tracking-wide text-muted">Out of the game</p>
         <p className="text-sm">
-          Town {out.citizen} · Mafia {out.mafia} · Independent {out.independent}
+          Citizen {out.citizen} · Mafia {out.mafia} · Independent {out.independent}
         </p>
       </div>
       <div>
         <p className="mb-1 text-[11px] uppercase tracking-wide text-muted">Still in play</p>
         <p className="text-sm">
-          Town {inPlay.citizen} · Mafia {inPlay.mafia} · Independent {inPlay.independent}
+          Citizen {inPlay.citizen} · Mafia {inPlay.mafia} · Independent {inPlay.independent}
         </p>
       </div>
       <p className="text-xs text-muted">{used}/2 inquiries used</p>
@@ -682,7 +682,7 @@ function InquiryReport({
           recordStageAction(
             gameId,
             "inquiry",
-            `Inquiry asked. Out: Town ${out.citizen}, Mafia ${out.mafia}, Independent ${out.independent}. In play: Town ${inPlay.citizen}, Mafia ${inPlay.mafia}, Independent ${inPlay.independent}.`,
+            `Inquiry asked. Out: Citizen ${out.citizen}, Mafia ${out.mafia}, Independent ${out.independent}. In play: Citizen ${inPlay.citizen}, Mafia ${inPlay.mafia}, Independent ${inPlay.independent}.`,
           )
         }
       >

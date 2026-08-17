@@ -20,7 +20,7 @@ const DAY_TASKS: StageTask[] = [
     key: "inquiry",
     nameEn: "Inquiry",
     nameFa: "استعلام",
-    summaryEn: "Report how many Town, Mafia, and Independent roles are out — and how many remain.",
+    summaryEn: "Report how many Citizen, Mafia, and Independent roles are out — and how many remain.",
     notesEn: "From day 2. The table may ask only twice. Record each time they ask.",
   },
   {
@@ -119,7 +119,7 @@ const NIGHT_TASKS: StageTask[] = [
   },
   {
     key: "town",
-    nameEn: "Town",
+    nameEn: "Citizen",
     nameFa: "عملیات شهر",
     summaryEn: "Say the town lines for roles in this scenario. Record Watson’s save and Leon’s shot when they act.",
     notesEn: "Night 1+. Skip roles that were never in the scenario. If a dealt role is out but not publicly known, still say the line. Watson may self-save once. Removals wait until you go to the next day.",

@@ -20,12 +20,7 @@ export function AdminUsers({ users }: { users: UserRow[] }) {
 
   return (
     <div className="flex flex-1 flex-col gap-4">
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="display text-2xl font-semibold">{t("users")}</h1>
-        <Button href="/admin/users/new" className="w-auto min-h-10 px-4 text-sm">
-          {t("inviteUser")}
-        </Button>
-      </div>
+      <Button href="/admin/users/new">{t("inviteUser")}</Button>
       <Panel className="space-y-2 p-2">
         {users.map((user) => {
           const status = !user.enabled
