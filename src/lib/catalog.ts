@@ -64,9 +64,9 @@ export const CATALOG_ROLES: CatalogRole[] = [
     faction: "citizen",
     dealable: true,
     nightOrder: 5,
-    summaryEn: "Marks a player for a public reveal",
-    description: "فقط یک شب می‌تواند با یک بازیکن بنشیند. اگر مافیا باشد صبح شو می‌شود. اگر شهروند یا مستقل باشد اتفاقی نمی‌افتد.",
-    descriptionEn: "Once, sits with a player. If Mafia (including Godfather), they are revealed in the morning. Town or independent: nothing happens.",
+    summaryEn: "One coupon; Mafia mark means Kane leaves next night",
+    description: "فقط یک کوپن دارد. یک‌بار شب با یک بازیکن می‌نشیند. اگر شهروند یا مستقل باشد اتفاقی نمی‌افتد و کوپن مصرف می‌شود. اگر مافیا باشد، کین شب بعد از بازی خارج می‌شود.",
+    descriptionEn: "One coupon. Once, sits with a player. Citizen or independent: nothing happens, coupon is spent. Mafia: Kane leaves the following night.",
   },
   {
     key: "detective",
@@ -132,7 +132,7 @@ export const CATALOG_ROLES: CatalogRole[] = [
     nightOrder: 2,
     summaryEn: "Leads the Mafia shot",
     description: "هر شب یک نفر را برای حذف انتخاب می‌کند. جلیقه دارد. استعلام او منفی است. حس ششم برای سلاخی دارد.",
-    descriptionEn: "Chooses the night kill. Has a vest. Reads as town to the Detective. Sixth sense can slaughter a confirmed independent.",
+    descriptionEn: "Chooses the night kill. Has a vest. Reads as town to the Detective. Sixth sense: Cancel, Wrong, or Correct — Correct removes the guessed player.",
   },
   {
     key: "saul",

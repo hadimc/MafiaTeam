@@ -17,6 +17,7 @@ import { getGameForNarrator, isNarrator, readSnapshot, snapshotFromScenario } fr
 import {
   activeJackCurse,
   jackCurseRound,
+  lecterSelfSaved,
   livingHolds,
   NIGHT_ACTION_ROLE,
   NIGHT_REPLACEABLE,
@@ -42,6 +43,7 @@ function revalidateGame(gameId: string, slug: string) {
   revalidatePath(`/events/${slug}/players`);
   revalidatePath("/dashboard");
   revalidatePath("/past");
+  revalidatePath("/admin/events");
 }
 
 export async function dealRolesAction(eventId: string) {
@@ -309,6 +311,7 @@ export async function recordStageAction(
   actionType: string,
   messageEn: string,
   targetPlayerId?: string,
+  metadata?: string,
 ) {
   const { user, game } = await narratorGame(gameId);
   const requiredRole = NIGHT_ACTION_ROLE[actionType];
@@ -336,7 +339,7 @@ export async function recordStageAction(
   }
   const lecter = game.players.find((player) => player.roleKey === "lecter");
   if (actionType === "lecter" && lecter && targetPlayerId === lecter.id) {
-    if (otherNights("lecter").some((action) => action.targetPlayerId === lecter.id)) return { error: "self_save" };
+    if (lecterSelfSaved(otherNights("lecter"), lecter.id)) return { error: "self_save" };
   }
   if (actionType === "kane" && otherNights("kane").length) return { error: "used" };
   if (actionType === "constantine" && otherNights("constantine").length) return { error: "used" };
@@ -392,6 +395,7 @@ export async function recordStageAction(
     messageEn,
     messageEn,
     targetPlayerId,
+    metadata,
   );
   revalidateGame(gameId, game.event.slug);
 }
@@ -448,6 +452,7 @@ export async function resetFaceChangeAction(gameId: string) {
   const { user, game } = await narratorGame(gameId);
   const action = [...game.actions].reverse().find((item) => item.actionType === "faceChange");
   if (!action) return { error: "none" };
+  if (action.dayNumber !== game.currentDay) return { error: "locked" };
   let fromId = "";
   let toId = action.targetPlayerId ?? "";
   try {
@@ -716,7 +721,7 @@ export async function revealMyRoleAction(gameId: string) {
 
 export async function endGameAction(gameId: string, winningFaction: string) {
   const { user, game } = await narratorGame(gameId);
-  if (game.status === "finished") return { error: "closed" };
+  if (game.status === "finished" && !user.isAdmin) return { error: "closed" };
   if (winningFaction !== "citizen" && winningFaction !== "mafia" && winningFaction !== "independent") {
     return { error: "faction" };
   }
@@ -731,17 +736,19 @@ export async function endGameAction(gameId: string, winningFaction: string) {
 export async function closeGameAction(gameId: string) {
   const { user, game } = await narratorGame(gameId);
   if (!game.winningFaction) return { error: "winner" };
-  await prisma.game.update({
-    where: { id: gameId },
-    data: {
-      status: "finished",
-      currentPhase: "game_over",
-      finishedAt: game.finishedAt ?? new Date(),
-    },
-  });
-  await prisma.event.update({ where: { id: game.eventId }, data: { status: "finished" } });
-  await log(gameId, game.currentDay, "game_over", user.id, "close", "بازی بسته شد", "Game closed");
-  revalidateGame(gameId, game.event.slug);
+  if (game.status !== "finished") {
+    await prisma.game.update({
+      where: { id: gameId },
+      data: {
+        status: "finished",
+        currentPhase: "game_over",
+        finishedAt: game.finishedAt ?? new Date(),
+      },
+    });
+    await prisma.event.update({ where: { id: game.eventId }, data: { status: "finished" } });
+    await log(gameId, game.currentDay, "game_over", user.id, "close", "بازی بسته شد", "Game closed");
+    revalidateGame(gameId, game.event.slug);
+  }
   redirect(`/events/${game.event.slug}`);
 }
 
@@ -758,6 +765,8 @@ export async function resetGameAction(gameId: string) {
   revalidatePath(`/events/${slug}`);
   revalidatePath(`/events/${slug}/players`);
   revalidatePath("/dashboard");
+  revalidatePath("/past");
+  revalidatePath("/admin/events");
   redirect(`/events/${slug}`);
 }
 

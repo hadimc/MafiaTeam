@@ -140,6 +140,60 @@ export async function deleteUserAction(userId: string) {
   revalidatePath("/admin/users");
 }
 
+function passwordOk(hash: string | null, password: string) {
+  return Boolean(hash && password && bcrypt.compareSync(password, hash));
+}
+
+export async function updateMyProfileAction(formData: FormData): Promise<{ error?: string } | void> {
+  const user = await requireUser();
+  const displayName = String(formData.get("displayName") ?? "").trim();
+  if (!displayName) return { error: "invalid" };
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { displayName, displayNameEn: displayName },
+  });
+  revalidatePath("/profile");
+  revalidatePath("/dashboard");
+  revalidatePath("/");
+}
+
+export async function updateMyEmailAction(formData: FormData): Promise<{ error?: string } | void> {
+  const session = await requireUser();
+  const email = emailOf(String(formData.get("email") ?? ""));
+  const currentPassword = String(formData.get("currentPassword") ?? "");
+  if (!isEmail(email)) return { error: "invalid" };
+
+  const user = await prisma.user.findUnique({ where: { id: session.id } });
+  if (!user) return { error: "not_found" };
+  if (!passwordOk(user.passwordHash, currentPassword)) return { error: "password" };
+
+  const clash = await prisma.user.findFirst({ where: { email, NOT: { id: user.id } } });
+  if (clash) return { error: "exists" };
+
+  await prisma.user.update({ where: { id: user.id }, data: { email } });
+  revalidatePath("/profile");
+}
+
+export async function updateMyPasswordAction(formData: FormData): Promise<{ error?: string } | void> {
+  const session = await requireUser();
+  const currentPassword = String(formData.get("currentPassword") ?? "");
+  const password = String(formData.get("password") ?? "");
+  const confirm = String(formData.get("confirm") ?? "");
+  if (password.length < 8) return { error: "short" };
+  if (password !== confirm) return { error: "mismatch" };
+
+  const user = await prisma.user.findUnique({ where: { id: session.id } });
+  if (!user) return { error: "not_found" };
+  if (!passwordOk(user.passwordHash, currentPassword)) return { error: "password" };
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { passwordHash: bcrypt.hashSync(password, 10) },
+  });
+  revalidatePath("/profile");
+}
+
 export async function setPasswordWithTokenAction(
   kind: "invite" | "reset",
   token: string,

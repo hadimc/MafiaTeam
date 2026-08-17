@@ -105,7 +105,7 @@ export async function getGameForNarrator(gameId: string, user: SessionUser) {
     },
   });
   if (!game) return null;
-  if (!isNarrator(user, game.event)) return null;
+  if (!user.isAdmin && !isNarrator(user, game.event)) return null;
   return game;
 }
 
