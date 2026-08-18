@@ -21,7 +21,7 @@ Club members and the shared temp password live in `prisma/club.local.json` (giti
 npx prisma db seed
 ```
 
-Registration is invite-only. As admin, open `/admin/users` to invite people, disable accounts, or send a password-reset link. Without SMTP, copy the generated link and send it yourself.
+Registration is invite-only. As admin, open `/admin/users` to invite people, disable accounts, or send a password-reset link. With SMTP configured, that button emails the user; a copyable link is still shown as backup. Placeholder `@mafiateam.local` addresses are not emailed.
 
 Sample event: `/events/friday-mafia-aug-21`.
 

@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db";
 import { requireAdmin, requireUser } from "@/lib/auth";
 import { getEventBySlug, isNarrator } from "@/lib/queries";
 import { MAX_NARRATORS } from "@/lib/roster";
-import { isRosterOpen, canReopenScenario, eventLane } from "@/lib/stats";
+import { isRosterOpen, canReopenScenario } from "@/lib/stats";
 import {
   EXIT_CARDS,
   defaultConfig,
@@ -314,17 +314,17 @@ export async function createEventAction(formData: FormData) {
   return { slug: event.slug };
 }
 
-export async function deletePastEventAction(eventId: string) {
+export async function deleteEventAction(eventId: string) {
   await requireAdmin();
   const event = await prisma.event.findUnique({ where: { id: eventId } });
   if (!event) return { error: "not_found" };
-  if (eventLane(event.status) !== "past") return { error: "not_past" };
 
   await prisma.event.delete({ where: { id: eventId } });
   revalidatePath("/dashboard");
   revalidatePath("/past");
   revalidatePath("/admin");
   revalidatePath("/admin/events");
+  revalidatePath(`/events/${event.slug}`);
   return { ok: true as const };
 }
 

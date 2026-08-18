@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useLang } from "@/lib/lang";
 import { Button, Panel, fieldClass } from "@/components/ui";
 import { ShareJoinLink } from "@/components/CopyLink";
-import { createEventAction, deletePastEventAction } from "@/server/actions/events";
+import { createEventAction, deleteEventAction } from "@/server/actions/events";
 import { eventLane } from "@/lib/stats";
 
 export function AdminEvents({
@@ -18,6 +18,7 @@ export function AdminEvents({
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState<string | null>(null);
 
   const upcoming = events
     .filter((event) => eventLane(event.status) !== "past")
@@ -40,8 +41,9 @@ export function AdminEvents({
 
   async function remove(eventId: string) {
     setRemoving(eventId);
-    await deletePastEventAction(eventId);
+    await deleteEventAction(eventId);
     setRemoving(null);
+    setConfirming(null);
     router.refresh();
   }
 
@@ -80,8 +82,29 @@ export function AdminEvents({
           <Panel key={event.id} className="space-y-3">
             <h3 className="display text-lg font-semibold">{event.titleEn || event.title}</h3>
             <p className="text-sm capitalize text-muted">{event.status.replaceAll("_", " ")}</p>
-            <ShareJoinLink slug={event.slug} />
-            <Button href={`/events/${event.slug}`}>{t("openEvent")}</Button>
+            {confirming === event.id ? (
+              <>
+                <p className="text-sm text-muted">{t("removeEventWarn")}</p>
+                <Button
+                  variant="danger"
+                  disabled={removing === event.id}
+                  onClick={() => void remove(event.id)}
+                >
+                  {t("yesRemoveEvent")}
+                </Button>
+                <Button variant="ghost" onClick={() => setConfirming(null)}>
+                  {t("cancel")}
+                </Button>
+              </>
+            ) : (
+              <>
+                <ShareJoinLink slug={event.slug} />
+                <Button href={`/events/${event.slug}`}>{t("openEvent")}</Button>
+                <Button variant="danger" onClick={() => setConfirming(event.id)}>
+                  {t("removeEvent")}
+                </Button>
+              </>
+            )}
           </Panel>
         ))}
       </section>

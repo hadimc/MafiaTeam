@@ -521,7 +521,7 @@ function NightReport({
   name: (player?: Player) => string;
 }) {
   const independents = leave.filter(
-    (player): player is Player => Boolean(player) && player.faction === "independent",
+    (player): player is Player => player != null && player.faction === "independent",
   );
   return (
     <div className="space-y-3">

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useLang, enName } from "@/lib/lang";
 import { Button, FactionPill, Panel, SeatAvatar, StatusPill } from "@/components/ui";
@@ -108,6 +109,8 @@ export function DashboardView({
       return game.players.some((player) => player.userId === user.id);
     });
   const myRole = myCard?.game.players.find((player) => player.userId === user.id);
+  const myRank = stats.table.findIndex((row) => row.userId === user.id) + 1;
+  const pastCount = events.filter((event) => eventLane(event.status) === "past").length;
 
   useEffect(() => {
     if (!myCard || !myRole) return;
@@ -118,10 +121,10 @@ export function DashboardView({
   }, [myCard, myRole, router]);
 
   return (
-    <div className="flex flex-1 flex-col gap-6">
+    <div className="flex flex-1 flex-col gap-5">
       <header className="pt-1">
-        <p className="text-[11px] uppercase tracking-[0.22em] text-gold">{enName(user)}</p>
-        <h1 className="display mt-2 text-3xl font-semibold">{t("dashboard")}</h1>
+        <p className="text-[11px] uppercase tracking-[0.22em] text-gold">{t("dashboard")}</p>
+        <h1 className="display mt-1 text-2xl font-semibold">{enName(user)}</h1>
       </header>
 
       {myCard && myRole ? (
@@ -139,91 +142,89 @@ export function DashboardView({
       />
 
       <section className="space-y-3">
-        <h2 className="display text-xl font-semibold">{t("records")}</h2>
-        <div className="grid grid-cols-2 gap-1 rounded-full border border-line bg-card/80 p-1">
-          <button
-            type="button"
-            onClick={() => setRecordView("individual")}
-            className={`rounded-full py-2 text-center text-xs font-semibold tracking-wide ${
-              recordView === "individual" ? "bg-gold text-black" : "text-muted"
-            }`}
-          >
-            {t("individual")}
-          </button>
-          <button
-            type="button"
-            onClick={() => setRecordView("club")}
-            className={`rounded-full py-2 text-center text-xs font-semibold tracking-wide ${
-              recordView === "club" ? "bg-gold text-black" : "text-muted"
-            }`}
-          >
-            {t("club")}
-          </button>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="display text-xl font-semibold">{t("records")}</h2>
+          <div className="flex rounded-full border border-line bg-bg-elev p-0.5">
+            <button
+              type="button"
+              onClick={() => setRecordView("individual")}
+              className={`rounded-full px-3 py-1 text-[11px] font-semibold tracking-wide ${
+                recordView === "individual" ? "bg-gold text-black" : "text-muted"
+              }`}
+            >
+              {t("individual")}
+            </button>
+            <button
+              type="button"
+              onClick={() => setRecordView("club")}
+              className={`rounded-full px-3 py-1 text-[11px] font-semibold tracking-wide ${
+                recordView === "club" ? "bg-gold text-black" : "text-muted"
+              }`}
+            >
+              {t("club")}
+            </button>
+          </div>
         </div>
-        {recordView === "club" ? (
-          <>
-            <p className="text-sm text-muted">{t("clubWinsHint")}</p>
-            <div className="grid grid-cols-4 gap-2 text-center">
-              <Stat icon={<MoonIcon />} label={t("nightsPlayed")} value={stats.nights} />
-              <Stat icon={<TownIcon />} label={t("townWins")} value={stats.clubWins.citizen} accent="text-citizen" />
-              <Stat icon={<MafiaIcon />} label={t("mafiaWins")} value={stats.clubWins.mafia} accent="text-mafia" />
-              <Stat icon={<IndieIcon />} label={t("independentWins")} value={stats.clubWins.independent} accent="text-indie" />
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="grid grid-cols-2 gap-2 text-center">
-              <Stat icon={<MoonIcon />} label={t("nightsPlayed")} value={stats.me.played} />
-              <Stat icon={<TrophyIcon />} label={t("wins")} value={stats.me.wins} accent="text-gold" />
-            </div>
-            <div className="grid grid-cols-3 gap-2 text-center">
-              <Stat icon={<TownIcon />} label={t("townWins")} value={stats.me.winsBySide.citizen} accent="text-citizen" />
-              <Stat icon={<MafiaIcon />} label={t("mafiaWins")} value={stats.me.winsBySide.mafia} accent="text-mafia" />
-              <Stat icon={<IndieIcon />} label={t("independentWins")} value={stats.me.winsBySide.independent} accent="text-indie" />
-            </div>
-          </>
-        )}
+        <div className="grid grid-cols-4 gap-2 text-center">
+          {recordView === "club" ? (
+            <Stat icon={<GamesIcon />} label={t("nightsPlayed")} value={stats.nights} />
+          ) : (
+            <Stat
+              icon={<GamesIcon />}
+              label={t("winsOverGames")}
+              value={`${stats.me.wins}/${stats.me.played}`}
+            />
+          )}
+          <Stat
+            icon={<TownIcon />}
+            label={t("townWins")}
+            value={recordView === "club" ? stats.clubWins.citizen : stats.me.winsBySide.citizen}
+            accent="text-citizen"
+          />
+          <Stat
+            icon={<MafiaIcon />}
+            label={t("mafiaWins")}
+            value={recordView === "club" ? stats.clubWins.mafia : stats.me.winsBySide.mafia}
+            accent="text-mafia"
+          />
+          <Stat
+            icon={<IndieIcon />}
+            label={t("independentWins")}
+            value={recordView === "club" ? stats.clubWins.independent : stats.me.winsBySide.independent}
+            accent="text-indie"
+          />
+        </div>
       </section>
 
       <section className="space-y-3">
-        <h2 className="display text-xl font-semibold">{t("pastEvents")}</h2>
-        <Button href="/past">{t("openPastEvents")}</Button>
+        <h2 className="display text-xl font-semibold">{t("more")}</h2>
+        <div className="space-y-2">
+          <Shortcut
+            href="/rankings"
+            label={t("rankings")}
+            hint={
+              myRank
+                ? `#${myRank} · ${stats.me.wins}W · ${stats.me.played - stats.me.wins}L`
+                : undefined
+            }
+            icon={<RankIcon />}
+          />
+          <Shortcut
+            href="/past"
+            label={t("pastEvents")}
+            hint={pastCount ? `${pastCount} ${t("nightsPlayed").toLowerCase()}` : t("noPastNights")}
+            icon={<HistoryIcon />}
+          />
+        </div>
+        <div className="flex gap-4 px-1 pt-1">
+          <Link href="/profile" className="text-sm font-semibold text-gold underline-offset-4 hover:underline">
+            {t("profile")}
+          </Link>
+          <Link href="/rules" className="text-sm font-semibold text-gold underline-offset-4 hover:underline">
+            {t("houseRules")}
+          </Link>
+        </div>
       </section>
-
-      {stats.table.length ? (
-        <section className="space-y-3">
-          <h2 className="display text-xl font-semibold">{t("clubTable")}</h2>
-          <Panel className="space-y-2">
-            <ol className="space-y-2">
-              {stats.table.slice(0, 10).map((row, i) => (
-                <li
-                  key={row.userId}
-                  className={`flex items-center justify-between gap-3 rounded-2xl px-3 py-2.5 ${
-                    row.userId === user.id ? "bg-gold/10" : "bg-bg-elev"
-                  }`}
-                >
-                  <span className="flex min-w-0 items-center gap-3">
-                    <SeatAvatar name={row.name} seat={i + 1} />
-                    <span className="truncate">{row.name}</span>
-                  </span>
-                  <span className="shrink-0 text-sm text-muted">
-                    {row.wins}W · {row.played - row.wins}L
-                  </span>
-                </li>
-              ))}
-            </ol>
-          </Panel>
-        </section>
-      ) : null}
-
-      <div className="grid grid-cols-2 gap-2">
-        <Button href="/profile" variant="ghost">
-          {t("profile")}
-        </Button>
-        <Button href="/rules" variant="ghost">
-          {t("houseRules")}
-        </Button>
-      </div>
     </div>
   );
 }
@@ -319,6 +320,41 @@ function NightList({
   );
 }
 
+export function RankingsView({ userId, table }: { userId: string; table: PlayerRecord[] }) {
+  const { t } = useLang();
+  return (
+    <div className="flex flex-1 flex-col gap-6">
+      <Button href="/dashboard" variant="ghost" className="w-auto self-start min-h-10 px-3 text-sm">
+        {t("backToDashboard")}
+      </Button>
+      <header className="pt-1">
+        <h1 className="display text-3xl font-semibold">{t("rankings")}</h1>
+      </header>
+      {table.length === 0 ? <p className="text-sm text-muted">{t("noPastNights")}</p> : null}
+      <Panel className="space-y-2">
+        <ol className="space-y-2">
+          {table.map((row, i) => (
+            <li
+              key={row.userId}
+              className={`flex items-center justify-between gap-3 rounded-2xl px-3 py-2.5 ${
+                row.userId === userId ? "bg-gold/10" : "bg-bg-elev"
+              }`}
+            >
+              <span className="flex min-w-0 items-center gap-3">
+                <SeatAvatar name={row.name} seat={i + 1} />
+                <span className="truncate">{row.name}</span>
+              </span>
+              <span className="shrink-0 text-sm text-muted">
+                {row.wins}W · {row.played - row.wins}L
+              </span>
+            </li>
+          ))}
+        </ol>
+      </Panel>
+    </div>
+  );
+}
+
 export function PastEventsView({ events }: { events: EventCard[] }) {
   const { t } = useLang();
   const past = events
@@ -368,6 +404,36 @@ export function PastEventsView({ events }: { events: EventCard[] }) {
   );
 }
 
+function Shortcut({
+  href,
+  label,
+  hint,
+  icon,
+}: {
+  href: string;
+  label: string;
+  hint?: string;
+  icon: ReactNode;
+}) {
+  return (
+    <Link
+      href={href}
+      className="flex min-h-12 items-center gap-3 rounded-2xl border border-gold/35 bg-bg-elev px-3 py-2 active:scale-[0.98]"
+    >
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gold/15 text-gold">
+        <span className="h-5 w-5">{icon}</span>
+      </span>
+      <span className="min-w-0 flex-1 text-start">
+        <span className="block text-sm font-semibold tracking-wide text-ink">{label}</span>
+        {hint ? <span className="block truncate text-[11px] text-muted">{hint}</span> : null}
+      </span>
+      <span className="text-gold">
+        <ChevronIcon />
+      </span>
+    </Link>
+  );
+}
+
 function Stat({
   label,
   value,
@@ -375,7 +441,7 @@ function Stat({
   icon,
 }: {
   label: string;
-  value: number;
+  value: number | string;
   accent?: string;
   icon: ReactNode;
 }) {
@@ -388,20 +454,29 @@ function Stat({
   );
 }
 
-function MoonIcon() {
+function GamesIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-full w-full" aria-hidden>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M20 15.2A7.4 7.4 0 0 1 8.8 4 8 8 0 1 0 20 15.2Z" />
+      <rect x="5" y="4.5" width="10" height="14" rx="1.6" />
+      <path d="M15 6.5h2.2A1.8 1.8 0 0 1 19 8.3v10.2A1.8 1.8 0 0 1 17.2 20.3H9" />
     </svg>
   );
 }
 
-function TrophyIcon() {
+function RankIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-full w-full" aria-hidden>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M8 5h8v3.5A4 4 0 0 1 12 12.5 4 4 0 0 1 8 8.5V5Z" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7H6a2.5 2.5 0 0 0 2.5 2.5M16 7h2a2.5 2.5 0 0 1-2.5 2.5" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 12.5V15M9 19h6M10 15h4v4h-4z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4 19h16M7 19v-5h3v5M10.5 19v-9h3v9M14 19v-7h3v7" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5 13.1 6.8 15.6 7.2 13.8 8.9 14.2 11.4 12 10.2 9.8 11.4 10.2 8.9 8.4 7.2 10.9 6.8 12 4.5Z" />
+    </svg>
+  );
+}
+
+function HistoryIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-full w-full" aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4.8 12a7.2 7.2 0 1 0 2-5.1" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4.8 5.2v4.2h4.2M12 8.2V12l2.6 1.6" />
     </svg>
   );
 }
@@ -436,6 +511,14 @@ function IndieIcon() {
         strokeLinejoin="round"
         d="M12 4.5 13.6 9h4.7l-3.8 2.9 1.5 4.6L12 13.8 8 16.5l1.5-4.6L5.7 9h4.7L12 4.5Z"
       />
+    </svg>
+  );
+}
+
+function ChevronIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="h-5 w-5 shrink-0" aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 6l6 6-6 6" />
     </svg>
   );
 }

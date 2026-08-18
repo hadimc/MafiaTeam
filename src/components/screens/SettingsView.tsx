@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useLang } from "@/lib/lang";
-import { Button, Panel, fieldClass } from "@/components/ui";
+import { Button, Panel, PasswordField, fieldClass } from "@/components/ui";
 import { logoutAction } from "@/server/actions/auth";
 import { updateMyEmailAction, updateMyPasswordAction, updateMyProfileAction } from "@/server/actions/users";
 
@@ -77,13 +77,11 @@ export function SettingsView({ profile }: { profile: Profile }) {
           <label className="text-sm text-muted">{t("email")}</label>
           <input name="email" type="email" defaultValue={profile.email} required className={fieldClass} />
           <label className="text-sm text-muted">{t("currentPassword")}</label>
-          <input
+          <PasswordField
             key={emailLock}
             name="currentPassword"
-            type="password"
             required
             autoComplete="current-password"
-            className={fieldClass}
           />
           {emailError ? <p className="text-sm text-mafia">{emailError}</p> : null}
           {emailSaved ? <p className="text-sm text-gold">{t("saved")}</p> : null}
@@ -116,11 +114,11 @@ export function SettingsView({ profile }: { profile: Profile }) {
         <Panel className="space-y-3">
           <h2 className="display text-lg font-semibold">{t("changePassword")}</h2>
           <label className="text-sm text-muted">{t("currentPassword")}</label>
-          <input name="currentPassword" type="password" required autoComplete="current-password" className={fieldClass} />
+          <PasswordField name="currentPassword" required autoComplete="current-password" />
           <label className="text-sm text-muted">{t("newPassword")}</label>
-          <input name="password" type="password" minLength={8} required autoComplete="new-password" className={fieldClass} />
+          <PasswordField name="password" minLength={8} required autoComplete="new-password" />
           <label className="text-sm text-muted">{t("confirmPassword")}</label>
-          <input name="confirm" type="password" minLength={8} required autoComplete="new-password" className={fieldClass} />
+          <PasswordField name="confirm" minLength={8} required autoComplete="new-password" />
           {passwordError ? <p className="text-sm text-mafia">{passwordError}</p> : null}
           {passwordSaved ? <p className="text-sm text-gold">{t("saved")}</p> : null}
           <Button type="submit">{t("save")}</Button>

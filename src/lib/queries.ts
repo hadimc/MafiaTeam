@@ -85,6 +85,14 @@ export async function listUsers() {
   return prisma.user.findMany({ orderBy: { displayNameEn: "asc" } });
 }
 
+export async function listEnabledMembers() {
+  return prisma.user.findMany({
+    where: { enabled: true },
+    select: { id: true, displayName: true, displayNameEn: true },
+    orderBy: { displayNameEn: "asc" },
+  });
+}
+
 export async function listRules() {
   return prisma.houseRule.findMany({ orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] });
 }
