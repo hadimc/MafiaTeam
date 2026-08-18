@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useLang } from "@/lib/lang";
-import { Button, Panel, fieldClass } from "@/components/ui";
+import { Button, Panel, PasswordField } from "@/components/ui";
 import { setPasswordWithTokenAction } from "@/server/actions/users";
 
 export function SetPasswordForm({
@@ -42,9 +42,9 @@ export function SetPasswordForm({
       >
         <Panel className="space-y-3">
           <label className="text-sm text-muted">{t("newPassword")}</label>
-          <input name="password" type="password" minLength={8} required className={fieldClass} />
+          <PasswordField name="password" minLength={8} required autoComplete="new-password" />
           <label className="text-sm text-muted">{t("confirmPassword")}</label>
-          <input name="confirm" type="password" minLength={8} required className={fieldClass} />
+          <PasswordField name="confirm" minLength={8} required autoComplete="new-password" />
           {error ? <p className="text-sm text-red-2">{error}</p> : null}
           <Button type="submit">{t("save")}</Button>
         </Panel>

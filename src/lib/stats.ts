@@ -28,9 +28,23 @@ function bump(sides: SideWins, faction: string) {
   }
 }
 
-export function computeStats(games: FinishedGame[], meId: string) {
+export function computeStats(
+  games: FinishedGame[],
+  meId: string,
+  members: { id: string; displayName: string; displayNameEn: string }[] = [],
+) {
   const clubWins: SideWins = { ...EMPTY_SIDES };
   const byUser = new Map<string, PlayerRecord>();
+
+  for (const member of members) {
+    byUser.set(member.id, {
+      userId: member.id,
+      name: member.displayNameEn?.trim() || member.displayName,
+      played: 0,
+      wins: 0,
+      winsBySide: { ...EMPTY_SIDES },
+    });
+  }
 
   for (const game of games) {
     const winner = game.winningFaction;
@@ -56,7 +70,13 @@ export function computeStats(games: FinishedGame[], meId: string) {
     }
   }
 
-  const table = [...byUser.values()].sort((a, b) => b.wins - a.wins || b.played - a.played || a.name.localeCompare(b.name));
+  const table = [...byUser.values()].sort((a, b) => {
+    if (b.wins !== a.wins) return b.wins - a.wins;
+    const aLosses = a.played - a.wins;
+    const bLosses = b.played - b.wins;
+    if (aLosses !== bLosses) return aLosses - bLosses;
+    return a.name.localeCompare(b.name);
+  });
   const me = byUser.get(meId) ?? {
     userId: meId,
     name: "",

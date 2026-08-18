@@ -11,6 +11,8 @@ export default function InviteUserPage() {
   const { t } = useLang();
   const router = useRouter();
   const [url, setUrl] = useState<string | null>(null);
+  const [delivered, setDelivered] = useState(false);
+  const [skipped, setSkipped] = useState<"placeholder" | "unconfigured" | "error" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function submit(formData: FormData) {
@@ -20,6 +22,8 @@ export default function InviteUserPage() {
     else if (result.error) setError(t("invalidLogin"));
     if (result.url) {
       setUrl(result.url);
+      setDelivered(Boolean(result.delivered));
+      setSkipped(result.skipped ?? null);
       router.refresh();
     }
   }
@@ -44,7 +48,18 @@ export default function InviteUserPage() {
           <Button type="submit">{t("sendInvite")}</Button>
         </Panel>
       </form>
-      {url ? <CopyLink url={url} /> : null}
+      {url ? (
+        <div className="space-y-2">
+          {delivered ? (
+            <p className="text-sm text-gold">{t("emailSent")}</p>
+          ) : skipped === "placeholder" ? (
+            <p className="text-sm text-muted">{t("placeholderEmail")}</p>
+          ) : (
+            <p className="text-sm text-muted">{t("emailNotSent")}</p>
+          )}
+          <CopyLink url={url} />
+        </div>
+      ) : null}
     </div>
   );
 }

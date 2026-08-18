@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useLang } from "@/lib/lang";
-import { Button, Panel, fieldClass } from "@/components/ui";
+import { Button, Panel, PasswordField, fieldClass } from "@/components/ui";
 import { CopyLink } from "@/components/CopyLink";
 import {
   deleteUserAction,
@@ -28,6 +28,9 @@ export function UserEditor({ user }: { user: User }) {
   const { t } = useLang();
   const router = useRouter();
   const [url, setUrl] = useState<string | null>(null);
+  const [delivered, setDelivered] = useState(false);
+  const [skipped, setSkipped] = useState<"placeholder" | "unconfigured" | "error" | null>(null);
+  const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   function explain(code?: string) {
@@ -60,7 +63,7 @@ export function UserEditor({ user }: { user: User }) {
           <label className="text-sm text-muted">{t("email")}</label>
           <input name="email" type="email" defaultValue={user.email} required className={fieldClass} />
           <label className="text-sm text-muted">{t("newPassword")}</label>
-          <input name="password" type="password" minLength={8} placeholder="••••••••" className={fieldClass} />
+          <PasswordField name="password" minLength={8} placeholder="••••••••" autoComplete="new-password" />
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" name="isAdmin" defaultChecked={user.isAdmin} />
             {t("makeAdmin")}
@@ -83,19 +86,38 @@ export function UserEditor({ user }: { user: User }) {
         </Button>
         <Button
           variant="ghost"
+          disabled={sending}
           onClick={async () => {
+            setSending(true);
+            setError(null);
             const result = user.hasPassword
               ? await sendResetLinkAction(user.id)
               : await resendInviteAction(user.id);
-            if (result.url) setUrl(result.url);
+            setSending(false);
+            if (result.url) {
+              setUrl(result.url);
+              setDelivered(Boolean(result.delivered));
+              setSkipped(result.skipped ?? null);
+            }
             setError(explain(result.error));
           }}
         >
-          {user.hasPassword ? t("sendReset") : t("resendInvite")}
+          {sending ? t("sending") : user.hasPassword ? t("sendReset") : t("resendInvite")}
         </Button>
       </div>
 
-      {url ? <CopyLink url={url} /> : null}
+      {url ? (
+        <div className="space-y-2">
+          {delivered ? (
+            <p className="text-sm text-gold">{t("emailSent")}</p>
+          ) : skipped === "placeholder" ? (
+            <p className="text-sm text-muted">{t("placeholderEmail")}</p>
+          ) : (
+            <p className="text-sm text-muted">{t("emailNotSent")}</p>
+          )}
+          <CopyLink url={url} />
+        </div>
+      ) : null}
 
       <Button
         variant="danger"

@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
+import { useLang } from "@/lib/lang";
 
 type Props = {
   href?: string;
@@ -45,6 +47,66 @@ export function Button({
 
 export const fieldClass =
   "min-h-12 w-full rounded-2xl border border-line bg-bg-elev px-4 text-ink outline-none placeholder:text-muted/60 focus:border-gold/50";
+
+export function PasswordField({
+  name,
+  autoComplete,
+  required,
+  minLength,
+  placeholder,
+  className = "",
+}: {
+  name: string;
+  autoComplete?: string;
+  required?: boolean;
+  minLength?: number;
+  placeholder?: string;
+  className?: string;
+}) {
+  const { t } = useLang();
+  const [show, setShow] = useState(false);
+  return (
+    <div className="relative">
+      <input
+        name={name}
+        type={show ? "text" : "password"}
+        autoComplete={autoComplete}
+        required={required}
+        minLength={minLength}
+        placeholder={placeholder}
+        className={`${fieldClass} pe-12 ${className}`}
+      />
+      <button
+        type="button"
+        onClick={() => setShow((open) => !open)}
+        className="absolute inset-y-0 end-0 flex w-12 items-center justify-center text-muted"
+        aria-label={show ? t("hidePassword") : t("showPassword")}
+      >
+        {show ? <EyeOffIcon /> : <EyeIcon />}
+      </button>
+    </div>
+  );
+}
+
+function EyeIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+      <path d="M2.5 12s3.7-7 9.5-7 9.5 7 9.5 7-3.7 7-9.5 7-9.5-7-9.5-7Z" />
+      <circle cx="12" cy="12" r="2.6" />
+    </svg>
+  );
+}
+
+function EyeOffIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+      <path d="M3 3l18 18" />
+      <path d="M10.1 10.2A2.6 2.6 0 0 0 12 14.6c.5 0 1-.1 1.4-.4" />
+      <path d="M6.1 6.5C4 8.1 2.5 12 2.5 12s3.7 7 9.5 7c2 0 3.8-.6 5.3-1.5" />
+      <path d="M12 5c4.2 0 7.4 3.2 8.8 5.2-.5.7-1.1 1.5-1.9 2.3" />
+    </svg>
+  );
+}
 
 export function Panel({
   children,

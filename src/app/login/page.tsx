@@ -3,7 +3,7 @@
 import { Suspense, useActionState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useLang } from "@/lib/lang";
-import { BrandMark, Button, Panel, fieldClass } from "@/components/ui";
+import { BrandMark, Button, Panel, PasswordField, fieldClass } from "@/components/ui";
 import { loginAction } from "@/server/actions/auth";
 
 export default function LoginPage() {
@@ -34,7 +34,7 @@ function LoginForm() {
           <label className="block text-xs uppercase tracking-[0.16em] text-muted">{t("emailOrUsername")}</label>
           <input name="username" autoComplete="username" className={fieldClass} />
           <label className="block text-xs uppercase tracking-[0.16em] text-muted">{t("password")}</label>
-          <input name="password" type="password" autoComplete="current-password" className={fieldClass} />
+          <PasswordField name="password" autoComplete="current-password" />
           {state?.error === "disabled" ? (
             <p className="text-sm text-mafia">{t("accountDisabled")}</p>
           ) : state?.error ? (

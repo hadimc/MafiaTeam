@@ -18,6 +18,7 @@ type ClubUser = {
   username: string;
   displayName: string;
   displayNameEn: string;
+  email?: string;
   admin?: boolean;
 };
 
@@ -66,7 +67,7 @@ async function main() {
       await prisma.user.create({
         data: {
           username: member.username,
-          email: `${member.username}@mafiateam.local`,
+          email: (member.email || `${member.username}@mafiateam.local`).trim().toLowerCase(),
           displayName: member.displayName,
           displayNameEn: member.displayNameEn,
           isAdmin: Boolean(member.admin),

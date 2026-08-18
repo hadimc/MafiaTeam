@@ -15,7 +15,12 @@ function isEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
-export type LinkResult = { error?: string; url?: string };
+export type LinkResult = {
+  error?: string;
+  url?: string;
+  delivered?: boolean;
+  skipped?: "placeholder" | "unconfigured" | "error";
+};
 
 export async function inviteUserAction(formData: FormData): Promise<LinkResult> {
   await requireAdmin();
@@ -40,13 +45,13 @@ export async function inviteUserAction(formData: FormData): Promise<LinkResult> 
 
   const token = await issueToken(user.id, "invite", 24 * 7);
   const url = inviteUrl(token);
-  await sendMail({
+  const mail = await sendMail({
     to: email,
     subject: "MafiaTeam invitation",
     text: `You were invited to MafiaTeam.\nSet your password:\n${url}\nThis link expires in 7 days.`,
   });
   revalidatePath("/admin/users");
-  return { url };
+  return { url, delivered: mail.delivered, skipped: mail.delivered ? undefined : mail.skipped };
 }
 
 export async function updateUserAction(userId: string, formData: FormData): Promise<{ error?: string } | void> {
@@ -103,12 +108,12 @@ export async function sendResetLinkAction(userId: string): Promise<LinkResult> {
   if (!user) return { error: "not_found" };
   const token = await issueToken(user.id, "reset", 24);
   const url = resetUrl(token);
-  await sendMail({
+  const mail = await sendMail({
     to: user.email,
     subject: "MafiaTeam password reset",
     text: `Reset your MafiaTeam password:\n${url}\nThis link expires in 24 hours.`,
   });
-  return { url };
+  return { url, delivered: mail.delivered, skipped: mail.delivered ? undefined : mail.skipped };
 }
 
 export async function resendInviteAction(userId: string): Promise<LinkResult> {
@@ -117,12 +122,12 @@ export async function resendInviteAction(userId: string): Promise<LinkResult> {
   if (!user) return { error: "not_found" };
   const token = await issueToken(user.id, "invite", 24 * 7);
   const url = inviteUrl(token);
-  await sendMail({
+  const mail = await sendMail({
     to: user.email,
     subject: "MafiaTeam invitation",
     text: `You were invited to MafiaTeam.\nSet your password:\n${url}\nThis link expires in 7 days.`,
   });
-  return { url };
+  return { url, delivered: mail.delivered, skipped: mail.delivered ? undefined : mail.skipped };
 }
 
 export async function deleteUserAction(userId: string) {

@@ -40,7 +40,7 @@ export function AdminScenarios({ scenarios }: { scenarios: ScenarioRow[] }) {
                     {scenario.nameEn || scenario.name}
                   </h2>
                   {scenario.eventCount > 0 ? (
-                    <span className="shrink-0 text-[11px] text-gold">{scenario.eventCount} nights</span>
+                    <span className="shrink-0 text-[11px] text-gold">{scenario.eventCount} games</span>
                   ) : null}
                 </div>
                 <p className="text-xs text-muted">
