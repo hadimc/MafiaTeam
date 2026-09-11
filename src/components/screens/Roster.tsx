@@ -1,10 +1,19 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useLang, enName } from "@/lib/lang";
-import { Panel, SeatAvatar } from "@/components/ui";
+import { Button, Panel, SeatAvatar, fieldClass } from "@/components/ui";
+import { addPlayerToEventAction } from "@/server/actions/events";
 
 type Person = { displayName: string; displayNameEn: string };
+
+export type ClubMember = {
+  id: string;
+  username: string;
+  displayName: string;
+  displayNameEn: string;
+};
 
 export function Roster({
   title,
@@ -14,6 +23,7 @@ export function Roster({
   seat,
   canSwitch,
   onSwitch,
+  onRemove,
 }: {
   title: string;
   people: { userId: string; user: Person }[];
@@ -22,6 +32,7 @@ export function Roster({
   seat: "narrator" | "player";
   canSwitch: boolean;
   onSwitch: () => void;
+  onRemove?: (userId: string) => void;
 }) {
   const { t } = useLang();
   return (
@@ -31,26 +42,86 @@ export function Roster({
       <ol className="space-y-2">
         {people.map((reg, i) => (
           <li key={reg.userId} className="flex items-center justify-between gap-3 rounded-2xl bg-bg-elev px-3 py-2.5">
-            <span className="flex items-center gap-3">
+            <span className="flex min-w-0 items-center gap-3">
               <SeatAvatar name={name(reg.user)} seat={i + 1} />
-              <span>{name(reg.user)}</span>
+              <span className="truncate">{name(reg.user)}</span>
             </span>
-            {reg.userId === me && canSwitch ? (
-              <button
-                type="button"
-                className="rounded-full bg-gold px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-black"
-                onClick={onSwitch}
-              >
-                {seat === "narrator" ? t("bePlayer") : t("beNarrator")}
-              </button>
-            ) : (
-              <span className="text-[11px] uppercase tracking-wide text-muted">
-                {seat === "narrator" ? t("narrator") : t("asPlayer")}
-              </span>
-            )}
+            <span className="flex shrink-0 items-center gap-2">
+              {reg.userId === me && canSwitch ? (
+                <button
+                  type="button"
+                  className="rounded-full bg-gold px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-black"
+                  onClick={onSwitch}
+                >
+                  {seat === "narrator" ? t("bePlayer") : t("beNarrator")}
+                </button>
+              ) : (
+                <span className="text-[11px] uppercase tracking-wide text-muted">
+                  {seat === "narrator" ? t("narrator") : t("asPlayer")}
+                </span>
+              )}
+              {onRemove ? (
+                <button
+                  type="button"
+                  className="rounded-full border border-red/30 bg-red/15 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-mafia"
+                  onClick={() => onRemove(reg.userId)}
+                >
+                  {t("removeFromEvent")}
+                </button>
+              ) : null}
+            </span>
           </li>
         ))}
       </ol>
+    </Panel>
+  );
+}
+
+export function AddPlayerForm({
+  eventId,
+  members,
+  registeredIds,
+}: {
+  eventId: string;
+  members: ClubMember[];
+  registeredIds: string[];
+}) {
+  const { t } = useLang();
+  const [userId, setUserId] = useState("");
+  const taken = new Set(registeredIds);
+  const available = members.filter((member) => !taken.has(member.id));
+  const selected = available.some((member) => member.id === userId) ? userId : "";
+
+  async function add() {
+    if (!selected) return;
+    await addPlayerToEventAction(eventId, selected);
+    setUserId("");
+  }
+
+  return (
+    <Panel className="space-y-3">
+      <h2 className="text-sm text-muted">{t("addPlayer")}</h2>
+      {available.length === 0 ? (
+        <p className="text-sm text-muted">{t("everyoneHere")}</p>
+      ) : (
+        <>
+          <select
+            className={fieldClass}
+            value={selected}
+            onChange={(event) => setUserId(event.target.value)}
+          >
+            <option value="">{t("pickPlayer")}</option>
+            {available.map((member) => (
+              <option key={member.id} value={member.id}>
+                {enName(member)}
+              </option>
+            ))}
+          </select>
+          <Button onClick={() => void add()} disabled={!selected}>
+            {t("addPlayer")}
+          </Button>
+        </>
+      )}
     </Panel>
   );
 }

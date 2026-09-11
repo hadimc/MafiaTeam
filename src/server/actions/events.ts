@@ -62,6 +62,37 @@ export async function joinEventAction(eventId: string) {
   return { ok: true as const };
 }
 
+export async function addPlayerToEventAction(eventId: string, userId: string) {
+  await requireAdmin();
+  const event = await eventWithNarrators(eventId);
+  if (!event) return { error: "not_found" };
+  if (!rosterUnlocked(event)) return { error: "closed" };
+
+  const member = await prisma.user.findUnique({ where: { id: userId } });
+  if (!member || !member.enabled) return { error: "not_found" };
+
+  const existing = await prisma.eventRegistration.findUnique({
+    where: { eventId_userId: { eventId, userId } },
+  });
+  if (!existing) {
+    await prisma.eventRegistration.create({ data: { eventId, userId } });
+  }
+  touchEvent(event.slug);
+  return { ok: true as const };
+}
+
+export async function removePlayerFromEventAction(eventId: string, userId: string) {
+  await requireAdmin();
+  const event = await eventWithNarrators(eventId);
+  if (!event) return { error: "not_found" };
+  if (!rosterUnlocked(event)) return { error: "closed" };
+
+  await prisma.eventNarrator.deleteMany({ where: { eventId, userId } });
+  await prisma.eventRegistration.deleteMany({ where: { eventId, userId } });
+  touchEvent(event.slug);
+  return { ok: true as const };
+}
+
 export async function leaveEventAction(eventId: string) {
   const user = await requireUser();
   const event = await eventWithNarrators(eventId);
@@ -296,6 +327,8 @@ export async function createEventAction(formData: FormData) {
     slug = `${slugBase}-${++n}`;
   }
 
+  const showHints = formData.get("showHints") === "on";
+
   const event = await prisma.event.create({
     data: {
       slug,
@@ -306,12 +339,23 @@ export async function createEventAction(formData: FormData) {
       date: new Date(dateRaw),
       createdById: admin.id,
       status: "registration_open",
+      showHints,
     },
   });
   revalidatePath("/dashboard");
   revalidatePath("/admin");
   revalidatePath("/admin/events");
   return { slug: event.slug };
+}
+
+export async function setEventShowHintsAction(eventId: string, showHints: boolean) {
+  await requireAdmin();
+  const event = await prisma.event.update({ where: { id: eventId }, data: { showHints } });
+  revalidatePath("/admin");
+  revalidatePath("/admin/events");
+  revalidatePath(`/events/${event.slug}`);
+  revalidatePath("/dashboard");
+  return { ok: true as const, showHints: event.showHints };
 }
 
 export async function deleteEventAction(eventId: string) {

@@ -111,11 +111,18 @@ const NIGHT_TASKS: StageTask[] = [
     notesEn: "Must switch every night. Curse stays on the person if cards swap. Freezes if Jack is shown.",
   },
   {
+    key: "zodiac",
+    nameEn: "Zodiac",
+    nameFa: "عملیات زودیاک",
+    summaryEn: "Intro night: thumbs-up only. Even nights: shoot one player from either side.",
+    notesEn: "Skip on odd nights — the Zodiac is not woken. Night-immune to the Mafia shot and Leon's shot. Shooting Watson kills the Zodiac instead. Only a day vote or the Gunner's real round removes the Zodiac.",
+  },
+  {
     key: "mafia",
     nameEn: "Mafia",
     nameFa: "عملیات مافیا",
     summaryEn: "Say the lines for Mafia roles that are in this scenario. Main action is one of: shot, sixth sense, or purchase. Then Lecter save and Matador block if those roles exist.",
-    notesEn: "Night 1+. Skip roles that were never in this scenario. If a dealt role is out but not publicly known, still say the wake line. Do not record an ability after its holder has left: no sixth sense without Godfather, no purchase without Saul, no Lecter save, no Matador block. Lecter may self-save once. Tap again to correct a target. Nobody leaves until the night ends.",
+    notesEn: "Night 1+. Skip roles that were never in this scenario. If a dealt role is out but not publicly known, still say the wake line. Do not record an ability after its holder has left: no sixth sense without Godfather, no purchase without Saul, no Lecter save, no Matador block. Purchase is available only after Mafia has already lost a member. Lecter may self-save once. Tap again to correct a target. Nobody leaves until the night ends.",
   },
   {
     key: "town",
@@ -213,6 +220,7 @@ export function dayTasks(
   scriptRoles: string[],
   mayorCouponDay: number | null = null,
   livingRoles: Set<string> | null = null,
+  hasActiveGunHolder = false,
 ) {
   const set = new Set(scriptRoles);
   const living = (key: string) => !livingRoles || livingRoles.has(key);
@@ -224,7 +232,9 @@ export function dayTasks(
       if (mayorCouponDay == null) return true;
       return mayorCouponDay === stage.n;
     }
-    if (task.key === "dayShot") return stage.n >= 1 && set.has("gunner") && living("gunner");
+    if (task.key === "dayShot") {
+      return stage.n >= 1 && set.has("gunner") && (living("gunner") || hasActiveGunHolder);
+    }
     if (task.key === "removePlayers") return stage.n >= 1;
     return stage.n >= 1;
   });
@@ -246,6 +256,11 @@ export function nightTasks(
     }
     if (task.key === "nostradamus") return stage.n === 0 && line("nostradamus") !== "skip";
     if (task.key === "jack") return line("jack") !== "skip";
+    if (task.key === "zodiac") {
+      if (line("zodiac") === "skip") return false;
+      if (stage.n === 0) return true;
+      return stage.n >= 2 && stage.n % 2 === 0;
+    }
     if (task.key === "mafia") return anyMafia;
     if (task.key === "town") return anyTown;
     if (task.key === "nightEnd") return stage.n >= 1;
@@ -331,8 +346,65 @@ export function jackCurseRound(
   return { ...history, eligibleIds: eligible, round, newRound: awaitingNewRound };
 }
 
+export const GUNNER_FAKE_MAX = 2;
+export const GUNNER_REAL_MAX = 1;
+
+export type GunnerBullet = "fake" | "real";
+
+export function gunnerBulletType(action: { metadata?: string | null }): GunnerBullet | null {
+  if (!action.metadata) return null;
+  try {
+    const meta = JSON.parse(action.metadata) as { bulletType?: string };
+    if (meta.bulletType === "real") return "real";
+    if (meta.bulletType === "fake") return "fake";
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+/** Ammo already handed out by the Gunner (each "gunner" gift action consumes one round). */
+export function gunnerAmmo(actions: { actionType: string; metadata?: string | null }[]) {
+  const gifts = actions.filter((action) => action.actionType === "gunner");
+  const realUsed = gifts.filter((action) => gunnerBulletType(action) === "real").length;
+  const fakeUsed = gifts.length - realUsed;
+  return {
+    fakeUsed,
+    realUsed,
+    fakeLeft: Math.max(0, GUNNER_FAKE_MAX - fakeUsed),
+    realLeft: Math.max(0, GUNNER_REAL_MAX - realUsed),
+  };
+}
+
+/** Living players currently holding a gun the Gunner gave them that they have not fired yet. */
+export function gunnerActiveHolders(
+  actions: {
+    actionType: string;
+    dayNumber: number;
+    targetPlayerId?: string | null;
+    metadata?: string | null;
+  }[],
+) {
+  const holders = new Map<string, { bulletType: GunnerBullet; day: number }>();
+  for (const action of actions) {
+    if (action.actionType === "gunner" && action.targetPlayerId) {
+      holders.set(action.targetPlayerId, { bulletType: gunnerBulletType(action) ?? "fake", day: action.dayNumber });
+      continue;
+    }
+    if (action.actionType === "gunnerShot") {
+      try {
+        const meta = JSON.parse(action.metadata || "{}") as { holderId?: string };
+        if (meta.holderId) holders.delete(meta.holderId);
+      } catch {
+        // ignore
+      }
+    }
+  }
+  return holders;
+}
+
 const NIGHT_PHASES = new Set(["night", "intro_night", "night_resolution"]);
-const NIGHT_IMMUNE = new Set(["jack", "nostradamus"]);
+const NIGHT_IMMUNE = new Set(["jack", "nostradamus", "zodiac"]);
 const MAFIA_MAIN = ["mafiaShot", "sixthSense", "saul"] as const;
 export const NIGHT_REPLACEABLE = [
   ...MAFIA_MAIN,
@@ -344,6 +416,7 @@ export const NIGHT_REPLACEABLE = [
   "detective",
   "constantine",
   "gunner",
+  "zodiac",
 ] as const;
 
 export type NightPickAction = {
@@ -372,6 +445,7 @@ export const NIGHT_ACTION_ROLE: Record<string, string> = {
   detective: "detective",
   constantine: "constantine",
   gunner: "gunner",
+  zodiac: "zodiac",
 };
 
 export function livingHolds(
@@ -379,6 +453,10 @@ export function livingHolds(
   roleKey: string,
 ) {
   return players.some((player) => player.roleKey === roleKey && player.alive !== false);
+}
+
+export function mafiaLostAMember(players: { faction: string; alive?: boolean }[]) {
+  return players.some((player) => player.faction === "mafia" && player.alive === false);
 }
 
 function dropDeadRolePicks(picks: Map<string, string>, players: NightPlayer[]) {
@@ -435,7 +513,14 @@ export function resolveNight(
   nightNumber: number,
 ) {
   if (nightNumber < 1) {
-    return { leaveIds: [] as string[], returnIds: [] as string[], shieldBreakIds: [] as string[], notes: [] as string[] };
+    return {
+      leaveIds: [] as string[],
+      returnIds: [] as string[],
+      shieldBreakIds: [] as string[],
+      notes: [] as string[],
+      kaneMafiaMarkId: null as string | null,
+      saulConvertId: null as string | null,
+    };
   }
 
   const picks = tonightPicks(actions, nightNumber);
@@ -468,6 +553,7 @@ export function resolveNight(
     leon: "Leon is out. That shot does not apply.",
     kane: "Kane is out. That coupon does not apply.",
     constantine: "Constantine is out. Nobody returns.",
+    zodiac: "Zodiac is out. That shot does not apply.",
   };
   for (const actionType of dropped) {
     const note = droppedNote[actionType];
@@ -491,6 +577,9 @@ export function resolveNight(
   }
   if (blockedRole === "godfather" && (mafiaShotPick || sixthPick)) {
     notes.push("Matador blocked the Godfather. The mafia main action does not apply.");
+  }
+  if (blockedRole === "zodiac" && picks.get("zodiac")) {
+    notes.push("Matador blocked Zodiac. That shot does not apply.");
   }
   if (blockedId && notes.every((note) => !/matador blocked/i.test(note))) {
     notes.push("Matador disabled that player. They cannot act tonight.");
@@ -526,6 +615,30 @@ export function resolveNight(
     }
   }
 
+  const saulTargetId = ability("saul", "saul");
+  let saulConvertId: string | null = null;
+  if (saulTargetId) {
+    const target = byId.get(saulTargetId);
+    const alreadyBought = Boolean(
+      target &&
+        actions.some(
+          (action) =>
+            action.actionType === "saulConvert" &&
+            action.dayNumber === nightNumber &&
+            action.targetPlayerId === target.id,
+        ),
+    );
+    if (!mafiaLostAMember(players)) {
+      notes.push("Saul’s purchase is not available until Mafia has lost a member.");
+    } else if (target && (target.roleKey === "villager" || alreadyBought)) {
+      saulConvertId = target.id;
+      byId.set(target.id, { ...target, roleKey: "mafioso", faction: "mafia" });
+      notes.push("Saul’s purchase succeeded. That player is Simple Mafia from tonight on.");
+    } else if (target) {
+      notes.push("Saul’s purchase failed. That player already has a role.");
+    }
+  }
+
   const leon = players.find((player) => player.roleKey === "leon");
   if (leonTargetId && leon) {
     const target = byId.get(leonTargetId);
@@ -535,13 +648,10 @@ export function resolveNight(
       } else if (target.faction === "citizen") {
         leave.add(leon.id);
         notes.push("Citizen hit. Leon is out. The citizen stays.");
-      } else if (
-        (target.roleKey === "godfather" || target.roleKey === "zodiac") &&
-        hasShield(actions, target.id, nightNumber)
-      ) {
+      } else if (target.roleKey === "godfather" && hasShield(actions, target.id, nightNumber)) {
         shieldBreakIds.push(target.id);
         notes.push("Shield broken. That player stays.");
-      } else if (target.faction === "mafia" || target.roleKey === "zodiac") {
+      } else if (target.faction === "mafia") {
         if (lecterSave === target.id) {
           notes.push("Lecter saved the Leon target. They stay.");
         } else {
@@ -554,9 +664,11 @@ export function resolveNight(
 
   const kanePlayer = players.find((player) => player.roleKey === "kane");
   const kaneTargetId = ability("kane", "kane");
+  let kaneMafiaMarkId: string | null = null;
   if (kaneTargetId && kanePlayer) {
     const target = byId.get(kaneTargetId);
     if (target?.faction === "mafia") {
+      kaneMafiaMarkId = target.id;
       notes.push("Kane coupon used on Mafia. Kane leaves the following night.");
     } else if (target) {
       notes.push("Kane coupon used. Target is not Mafia. Nothing happens.");
@@ -571,6 +683,21 @@ export function resolveNight(
       if (marked?.faction === "mafia") {
         leave.add(kanePlayer.id);
         notes.push("Kane sat with Mafia last night. Kane leaves.");
+      }
+    }
+  }
+
+  const zodiacPlayer = players.find((player) => player.roleKey === "zodiac");
+  const zodiacTargetId = ability("zodiac", "zodiac");
+  if (zodiacTargetId && zodiacPlayer && zodiacPlayer.alive !== false) {
+    const target = byId.get(zodiacTargetId);
+    if (target) {
+      if (target.roleKey === "watson") {
+        leave.add(zodiacPlayer.id);
+        notes.push("Zodiac misfired on the Doctor. The shot fails and Zodiac leaves instead.");
+      } else {
+        leave.add(target.id);
+        notes.push("Zodiac’s shot stands. That player leaves.");
       }
     }
   }
@@ -594,7 +721,42 @@ export function resolveNight(
     returnIds,
     shieldBreakIds: [...new Set(shieldBreakIds)],
     notes,
+    kaneMafiaMarkId,
+    saulConvertId,
   };
+}
+
+function actionAppliedViaNight(metadata?: string | null) {
+  if (!metadata) return false;
+  try {
+    return (JSON.parse(metadata) as { via?: string }).via === "night";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * What was actually committed to the game (eliminations/revives) when a given night was
+ * resolved, read straight from the persisted action log. Unlike re-running `resolveNight`,
+ * this stays correct even after the affected players' `alive` status has since changed
+ * (e.g. Kane's delayed leave, or Jack's curse chain), because it does not depend on any
+ * "is this role-holder still alive today" guard.
+ */
+export function appliedNightOutcome(
+  actions: { actionType: string; dayNumber: number; targetPlayerId?: string | null; metadata?: string | null }[],
+  nightNumber: number,
+) {
+  const leaveIds: string[] = [];
+  const returnIds: string[] = [];
+  for (const action of actions) {
+    if (action.dayNumber !== nightNumber || !actionAppliedViaNight(action.metadata)) continue;
+    if ((action.actionType === "eliminate" || action.actionType === "jackOut") && action.targetPlayerId) {
+      leaveIds.push(action.targetPlayerId);
+    } else if (action.actionType === "revive" && action.targetPlayerId) {
+      returnIds.push(action.targetPlayerId);
+    }
+  }
+  return { leaveIds, returnIds };
 }
 
 export function lastNightReport(
@@ -603,7 +765,12 @@ export function lastNightReport(
   players: NightPlayer[],
 ) {
   const result = resolveNight(actions, players, dayNumber - 1);
-  return { leaveIds: result.leaveIds, returnIds: result.returnIds };
+  const applied = appliedNightOutcome(actions, dayNumber - 1);
+  return {
+    leaveIds: applied.leaveIds,
+    returnIds: applied.returnIds,
+    kaneMafiaMarkId: result.kaneMafiaMarkId,
+  };
 }
 
 export function hasShield(

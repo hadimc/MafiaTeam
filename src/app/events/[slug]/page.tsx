@@ -1,5 +1,5 @@
 import { requireUser } from "@/lib/auth";
-import { getEventBySlug, listScenariosForEvent } from "@/lib/queries";
+import { getEventBySlug, listEnabledMembers, listScenariosForEvent } from "@/lib/queries";
 import { notFound } from "next/navigation";
 import { EventView } from "@/components/screens/EventView";
 
@@ -10,12 +10,16 @@ export default async function EventPage({ params }: { params: Promise<{ slug: st
   const user = await requireUser(`/events/${slug}`);
   const event = await getEventBySlug(slug);
   if (!event) notFound();
-  const scenarios = await listScenariosForEvent(event.scenarioId);
+  const [scenarios, members] = await Promise.all([
+    listScenariosForEvent(event.scenarioId),
+    user.isAdmin ? listEnabledMembers() : Promise.resolve([]),
+  ]);
   return (
     <EventView
       user={user}
       event={JSON.parse(JSON.stringify(event))}
       scenarios={JSON.parse(JSON.stringify(scenarios))}
+      members={JSON.parse(JSON.stringify(members))}
     />
   );
 }

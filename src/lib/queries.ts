@@ -88,7 +88,7 @@ export async function listUsers() {
 export async function listEnabledMembers() {
   return prisma.user.findMany({
     where: { enabled: true },
-    select: { id: true, displayName: true, displayNameEn: true },
+    select: { id: true, username: true, displayName: true, displayNameEn: true },
     orderBy: { displayNameEn: "asc" },
   });
 }

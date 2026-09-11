@@ -5,13 +5,21 @@ import { useRouter } from "next/navigation";
 import { useLang } from "@/lib/lang";
 import { Button, Panel, fieldClass } from "@/components/ui";
 import { ShareJoinLink } from "@/components/CopyLink";
-import { createEventAction, deleteEventAction } from "@/server/actions/events";
+import { createEventAction, deleteEventAction, setEventShowHintsAction } from "@/server/actions/events";
 import { eventLane } from "@/lib/stats";
 
 export function AdminEvents({
   events,
 }: {
-  events: { id: string; slug: string; title: string; titleEn: string; status: string; date: string }[];
+  events: {
+    id: string;
+    slug: string;
+    title: string;
+    titleEn: string;
+    status: string;
+    date: string;
+    showHints: boolean;
+  }[];
 }) {
   const { t } = useLang();
   const router = useRouter();
@@ -19,6 +27,14 @@ export function AdminEvents({
   const [error, setError] = useState<string | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
+  const [togglingHints, setTogglingHints] = useState<string | null>(null);
+
+  async function toggleHints(eventId: string, next: boolean) {
+    setTogglingHints(eventId);
+    await setEventShowHintsAction(eventId, next);
+    setTogglingHints(null);
+    router.refresh();
+  }
 
   const upcoming = events
     .filter((event) => eventLane(event.status) !== "past")
@@ -56,6 +72,13 @@ export function AdminEvents({
             <input name="title" placeholder="Title" className={fieldClass} />
             <input name="location" placeholder={t("location")} className={fieldClass} />
             <input name="date" type="datetime-local" className={fieldClass} />
+            <label className="flex items-start gap-2 text-sm">
+              <input type="checkbox" name="showHints" className="mt-0.5" />
+              <span>
+                <span className="block">{t("showHints")}</span>
+                <span className="block text-[12px] text-muted">{t("showHintsSub")}</span>
+              </span>
+            </label>
             {error ? <p className="text-sm text-mafia">{error}</p> : null}
             <div className="grid grid-cols-2 gap-2">
               <Button
@@ -100,6 +123,13 @@ export function AdminEvents({
               <>
                 <ShareJoinLink slug={event.slug} />
                 <Button href={`/events/${event.slug}`}>{t("openEvent")}</Button>
+                <Button
+                  variant="ghost"
+                  disabled={togglingHints === event.id}
+                  onClick={() => void toggleHints(event.id, !event.showHints)}
+                >
+                  {t("showHints")} · {event.showHints ? t("hintsOn") : t("hintsOff")}
+                </Button>
                 <Button variant="danger" onClick={() => setConfirming(event.id)}>
                   {t("removeEvent")}
                 </Button>

@@ -48,6 +48,7 @@ model Event {
   location    String
   locationEn  String
   status      String   @default("registration_open")
+  showHints   Boolean  @default(false)
   scenarioId  String?
   createdById String
   createdAt   DateTime @default(now())
