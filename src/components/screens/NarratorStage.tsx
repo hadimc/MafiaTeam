@@ -433,35 +433,45 @@ function TaskBody({
       ) : null}
 
       {task.key === "nostradamus" ? (
-        lineFor("nostradamus") === "record" ? (
-          <PickList
-            label="Target"
-            players={living}
+        <>
+          <AbilityHeader
+            label="Nostradamus"
+            holder={living.find((player) => player.roleKey === "nostradamus")}
             name={name}
-            onPick={(player) =>
-              recordStageAction(game.id, task.key, `${task.nameEn} → ${name(player)}`, player.id)
-            }
           />
-        ) : (
-          <Hint className="text-xs text-muted">Say the line. Nothing to record.</Hint>
-        )
+          {lineFor("nostradamus") === "record" ? (
+            <PickList
+              label="Target"
+              players={living}
+              name={name}
+              onPick={(player) =>
+                recordStageAction(game.id, task.key, `${task.nameEn} → ${name(player)}`, player.id)
+              }
+            />
+          ) : (
+            <Hint className="text-xs text-muted">Say the line. Nothing to record.</Hint>
+          )}
+        </>
       ) : null}
 
       {task.key === "jack" ? (
-        lineFor("jack") === "record" && !jackShown ? (
-          <JackCurse
-            gameId={game.id}
-            living={living}
-            name={name}
-            curses={curses}
-            byId={byId}
-            frozen={false}
-          />
-        ) : jackShown ? (
-          <p className="text-xs text-muted">The curse stays where it is.</p>
-        ) : (
-          <Hint className="text-xs text-muted">Say the line. Nothing to record.</Hint>
-        )
+        <>
+          <AbilityHeader label="Jack" holder={living.find((player) => player.roleKey === "jack")} name={name} />
+          {lineFor("jack") === "record" && !jackShown ? (
+            <JackCurse
+              gameId={game.id}
+              living={living}
+              name={name}
+              curses={curses}
+              byId={byId}
+              frozen={false}
+            />
+          ) : jackShown ? (
+            <p className="text-xs text-muted">The curse stays where it is.</p>
+          ) : (
+            <Hint className="text-xs text-muted">Say the line. Nothing to record.</Hint>
+          )}
+        </>
       ) : null}
 
       {task.key === "mafia" && introNight ? <LikeOrder label="Like order" players={mafiaLikes} name={name} /> : null}
@@ -920,21 +930,50 @@ function SeatOverride({
   );
 }
 
+/** Bold, high-contrast action title with the current role holder's seat + name next to it. */
+function AbilityHeader({
+  label,
+  holder,
+  name,
+}: {
+  label: string;
+  holder?: Player | null;
+  name: (player?: Player) => string;
+}) {
+  return (
+    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+      <p className="text-sm font-bold text-ink">{label}</p>
+      {holder ? (
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-gold/50 bg-gold/15 px-2.5 py-1 text-xs font-semibold text-gold">
+          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gold text-[10px] font-bold text-black">
+            {holder.seatNumber}
+          </span>
+          <span className="truncate">{name(holder)}</span>
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 function NightAbility({
   title,
   line,
   blocked,
+  holder,
+  name,
   children,
 }: {
   title: string;
   line: NightLine;
   blocked?: string | null;
+  holder?: Player | null;
+  name: (player?: Player) => string;
   children: React.ReactNode;
 }) {
   if (line === "skip") return null;
   return (
     <div>
-      <p className="mb-2 text-[11px] uppercase tracking-wide text-muted">{title}</p>
+      <AbilityHeader label={title} holder={holder} name={name} />
       {line === "cover" ? (
         <Hint className="text-xs text-muted">Say the line. Nothing to record.</Hint>
       ) : blocked ? (
@@ -983,6 +1022,7 @@ function MafiaNight({
   const canSixth = living.some((player) => player.roleKey === "godfather") && blockedRole !== "godfather";
   const canBuy = living.some((player) => player.roleKey === "saul") && !saulUsed && blockedRole !== "saul";
   const lecter = living.find((player) => player.roleKey === "lecter");
+  const matador = living.find((player) => player.roleKey === "matador");
   const lecterSelfUsed = Boolean(
     lecter && lecterSelfSaved(
       game.actions.filter((action) => action.dayNumber !== game.currentDay),
@@ -1009,7 +1049,7 @@ function MafiaNight({
         Say the list for roles in this scenario. Tap a different name to correct it. Nobody leaves yet.
       </Hint>
       <div>
-        <p className="mb-2 text-[11px] uppercase tracking-wide text-muted">Main action — pick one</p>
+        <p className="mb-2 text-sm font-bold text-ink">Main action — pick one</p>
         {blockedRole === "godfather" && blocked ? (
           <CannotActNote who={`${name(blocked)} (${blocked.roleNameEn})`} />
         ) : null}
@@ -1107,6 +1147,8 @@ function MafiaNight({
         title="Lecter save"
         line={lineFor("lecter")}
         blocked={blockedRole === "lecter" && blocked ? `${name(blocked)} (${blocked.roleNameEn})` : null}
+        holder={lecter}
+        name={name}
       >
         {lecterSelfUsed ? <p className="mb-2 text-xs text-gold">Self-save already used. Lecter cannot save themselves again.</p> : null}
         <PickList
@@ -1120,7 +1162,7 @@ function MafiaNight({
           <p className="mt-2 text-xs text-gold">Self-save (once). Lecter cannot do this again.</p>
         ) : null}
       </NightAbility>
-      <NightAbility title="Matador disability" line={lineFor("matador")}>
+      <NightAbility title="Matador disability" line={lineFor("matador")} holder={matador} name={name}>
         <PickList
           label="Block — tap again to change"
           players={living}
@@ -1176,6 +1218,7 @@ function TownNight({
   );
   const kaneTarget = tonightTarget(game.actions, game.currentDay, "kane");
   const kaneLine = lineFor("kane");
+  const detective = living.find((player) => player.roleKey === "detective");
   const detectiveLine = lineFor("detective");
   const leonTarget = tonightTarget(game.actions, game.currentDay, "leon");
   const preview = resolveNight(game.actions, game.players, game.currentDay);
@@ -1194,7 +1237,13 @@ function TownNight({
       <Hint className="text-xs text-gold">
         Say the list for roles in this scenario. Tap a different name to correct a mistake. Removals wait until Next.
       </Hint>
-      <NightAbility title="Dr. Watson — save" line={lineFor("watson")} blocked={blockedRole === "watson" ? blockedWho : null}>
+      <NightAbility
+        title="Dr. Watson — save"
+        line={lineFor("watson")}
+        blocked={blockedRole === "watson" ? blockedWho : null}
+        holder={watson}
+        name={name}
+      >
         <PickList
           label="Save — tap again to change"
           players={watsonTargets}
@@ -1205,7 +1254,7 @@ function TownNight({
       </NightAbility>
       {leonLine === "skip" ? null : (
         <div>
-          <p className="mb-2 text-[11px] uppercase tracking-wide text-muted">Leon — shot</p>
+          <AbilityHeader label="Leon — shot" holder={leon} name={name} />
           {leonLine === "cover" || leonSpent || !leon ? (
             leonSpent ? (
               <p className="text-xs text-muted">Leon’s two shots are spent.</p>
@@ -1245,7 +1294,7 @@ function TownNight({
       )}
       {kaneLine === "skip" ? null : (
         <div>
-          <p className="mb-2 text-[11px] uppercase tracking-wide text-muted">Citizen Kane — coupon</p>
+          <AbilityHeader label="Citizen Kane — coupon" holder={kane} name={name} />
           {kaneLine === "cover" || kaneUsed || !kane ? (
             kaneUsed ? (
               <p className="text-xs text-muted">Coupon already used.</p>
@@ -1285,13 +1334,13 @@ function TownNight({
       )}
       {detectiveLine === "skip" ? null : (
         <div>
-          <p className="mb-2 text-[11px] uppercase tracking-wide text-muted">Detective</p>
+          <AbilityHeader label="Detective" holder={detective} name={name} />
           <Hint className="text-xs text-muted">Say the line. Do not record the inquiry.</Hint>
         </div>
       )}
       {lineFor("gunner") === "skip" ? null : (
         <div>
-          <p className="mb-2 text-[11px] uppercase tracking-wide text-muted">Gunner — give gun</p>
+          <AbilityHeader label="Gunner — give gun" holder={living.find((player) => player.roleKey === "gunner")} name={name} />
           <GunnerNight
             game={game}
             living={living}
@@ -1309,9 +1358,10 @@ function TownNight({
         const spent = item.once && usedBefore;
         const selectedId = tonightTarget(game.actions, game.currentDay, item.key);
         if (line === "skip") return null;
+        const holder = living.find((player) => player.roleKey === item.key);
         return (
           <div key={item.key}>
-            <p className="mb-2 text-[11px] uppercase tracking-wide text-muted">{item.label}</p>
+            <AbilityHeader label={item.label} holder={holder} name={name} />
             {line === "cover" || spent ? (
               spent ? (
                 <p className="text-xs text-muted">Already used.</p>
