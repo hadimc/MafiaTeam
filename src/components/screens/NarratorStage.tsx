@@ -1165,7 +1165,7 @@ function MafiaNight({
       <NightAbility title="Matador disability" line={lineFor("matador")} holder={matador} name={name}>
         <PickList
           label="Block — tap again to change"
-          players={living}
+          players={living.filter((player) => player.faction === "citizen")}
           name={name}
           selectedId={blocked?.id}
           markedId={blocked?.id}

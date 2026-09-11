@@ -350,6 +350,10 @@ export async function recordStageAction(
     const nights = new Set(otherNights("leon").map((action) => action.dayNumber));
     if (nights.size >= 2) return { error: "spent" };
   }
+  if (actionType === "matador" && targetPlayerId) {
+    const target = game.players.find((player) => player.id === targetPlayerId);
+    if (target && target.faction !== "citizen") return { error: "not_citizen" };
+  }
   if (actionType === "gunner") {
     let bulletType: "fake" | "real" = "fake";
     try {
