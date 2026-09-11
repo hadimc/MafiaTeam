@@ -263,6 +263,21 @@ export const dictionary = {
   },
   scenarioName: { fa: "نام سناریو", en: "Scenario name" },
   scenarioNotes: { fa: "یادداشت", en: "Notes" },
+  scenarioBriefing: { fa: "گزارش سناریو", en: "Scenario briefing" },
+  scenarioBriefingHint: {
+    fa: "بعد از نهایی شدن سناریو، همه می‌توانند نقش‌ها و قوانین این میز را بخوانند.",
+    en: "Once the scenario is locked, everyone can study the roles and house rules for this table.",
+  },
+  openBriefing: { fa: "باز کردن گزارش", en: "Open briefing" },
+  shareBriefing: { fa: "کپی لینک گزارش", en: "Copy briefing link" },
+  shareBriefingHint: {
+    fa: "این لینک را برای بازیکنان بفرست تا گزارش سناریو را ببینند.",
+    en: "Send this link so players can open the scenario briefing.",
+  },
+  briefingIntro: { fa: "معرفی", en: "Introduction" },
+  exitCards: { fa: "کارت‌های خروج", en: "Exit cards" },
+  langEnglish: { fa: "English", en: "English" },
+  langFarsi: { fa: "فارسی", en: "Farsi" },
   scenarioExists: { fa: "سناریویی با این نام وجود دارد", en: "A scenario with that name already exists" },
   scenarioInUse: {
     fa: "این سناریو روی رویدادی است؛ به‌جای حذف، ویرایشش کنید",
@@ -271,6 +286,23 @@ export const dictionary = {
   deleteScenario: { fa: "حذف سناریو", en: "Delete scenario" },
   attendeeCount: { fa: "حاضرین", en: "Attendees" },
   needRoles: { fa: "حداقل یک نقش بازیکن لازم است", en: "Add at least one player role" },
+  forgotPassword: { fa: "رمز را فراموش کرده‌ای؟", en: "Forgot password?" },
+  forgotPasswordTitle: { fa: "بازیابی رمز", en: "Reset password" },
+  forgotPasswordHint: {
+    fa: "ایمیل یا نام کاربری‌ات را وارد کن. اگر حساب وجود داشته باشد لینک بازیابی می‌فرستیم.",
+    en: "Enter your email or username. If that account exists, we will send a reset link.",
+  },
+  forgotPasswordSent: {
+    fa: "اگر این حساب وجود داشته باشد، لینک بازیابی ارسال شد.",
+    en: "If that account exists, a reset link was sent.",
+  },
+  forgotPasswordExpiry: {
+    fa: "لینک تا ۲۴ ساعت معتبر است.",
+    en: "The link expires in 24 hours.",
+  },
+  sendResetEmail: { fa: "ارسال لینک بازیابی", en: "Send reset link" },
+  backToLogin: { fa: "بازگشت به ورود", en: "Back to sign in" },
+  resetTooSoon: { fa: "کمی صبر کن و دوباره امتحان کن", en: "Please wait a minute and try again" },
 } as const;
 
 export type Msg = keyof typeof dictionary;

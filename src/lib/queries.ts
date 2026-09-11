@@ -30,7 +30,7 @@ export async function getEventBySlug(slug: string) {
     where: { slug },
     include: {
       narrators: { include: { user: true }, orderBy: { createdAt: "asc" } },
-      scenario: { include: { roles: { orderBy: { nightOrder: "asc" } } } },
+      scenario: { include: { roles: { orderBy: { nightOrder: "asc" } }, exitCards: true } },
       registrations: { include: { user: true }, orderBy: { registeredAt: "asc" } },
       games: gameWithPlayers,
     },

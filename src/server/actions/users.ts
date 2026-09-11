@@ -4,8 +4,9 @@ import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireAdmin, requireUser } from "@/lib/auth";
-import { inviteUrl, issueToken, resetUrl, uniqueUsername, consumeToken } from "@/lib/tokens";
+import { inviteUrl, issueToken, uniqueUsername, consumeToken } from "@/lib/tokens";
 import { sendMail } from "@/lib/mail";
+import { issuePasswordReset } from "@/lib/passwordReset";
 
 function emailOf(value: string) {
   return value.trim().toLowerCase();
@@ -106,13 +107,7 @@ export async function sendResetLinkAction(userId: string): Promise<LinkResult> {
   await requireAdmin();
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) return { error: "not_found" };
-  const token = await issueToken(user.id, "reset", 24);
-  const url = resetUrl(token);
-  const mail = await sendMail({
-    to: user.email,
-    subject: "MafiaTeam password reset",
-    text: `Reset your MafiaTeam password:\n${url}\nThis link expires in 24 hours.`,
-  });
+  const { url, mail } = await issuePasswordReset(user);
   return { url, delivered: mail.delivered, skipped: mail.delivered ? undefined : mail.skipped };
 }
 

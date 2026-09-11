@@ -449,3 +449,77 @@ test("night briefing still reports Kane's delayed leave after Kane is already ma
   const result = lastNightReport(actions, 3, [deadKane, lecter]);
   assert.deepEqual(result.leaveIds, ["k"]);
 });
+
+function cuff(target: string, day = 1) {
+  return { actionType: "handcuffs", dayNumber: day, phase: "day_discussion", targetPlayerId: target };
+}
+
+test("Handcuffs on Watson ignores that save the following night", () => {
+  const result = resolveNight(
+    [act("mafiaShot", villager.id), act("watson", villager.id), cuff(watson.id)],
+    [villager, watson],
+    1,
+  );
+  assert.deepEqual(result.leaveIds, [villager.id]);
+  assert.equal(result.notes.some((note) => /handcuffs disabled watson/i.test(note)), true);
+});
+
+test("Handcuffs on the Godfather ignores the mafia shot", () => {
+  const godfather = player("g", "godfather", "mafia");
+  const result = resolveNight(
+    [act("mafiaShot", villager.id), act("watson", villager.id), cuff(godfather.id)],
+    [villager, watson, godfather],
+    1,
+  );
+  assert.deepEqual(result.leaveIds, []);
+  assert.equal(result.notes.some((note) => /handcuffs disabled the godfather/i.test(note)), true);
+});
+
+test("Handcuffs can disable Matador, so Matador's block does not apply", () => {
+  const result = resolveNight(
+    [act("mafiaShot", villager.id), act("watson", villager.id), act("matador", watson.id), cuff(matador.id)],
+    [villager, watson, matador],
+    1,
+  );
+  assert.deepEqual(result.leaveIds, []);
+  assert.equal(result.notes.some((note) => /handcuffs disabled matador/i.test(note)), true);
+  assert.equal(result.notes.some((note) => /matador blocked watson/i.test(note)), false);
+});
+
+test("Handcuffs can disable an independent night action", () => {
+  const result = resolveNight(
+    [act("zodiac", villager.id, 2), cuff(zodiac.id, 2)],
+    [zodiac, villager],
+    2,
+  );
+  assert.deepEqual(result.leaveIds, []);
+  assert.equal(result.notes.some((note) => /handcuffs disabled zodiac/i.test(note)), true);
+});
+
+test("Handcuffs and Matador can disable two different players the same night", () => {
+  const result = resolveNight(
+    [
+      act("mafiaShot", villager.id),
+      act("watson", villager.id),
+      act("zodiac", lecter.id),
+      act("matador", watson.id),
+      cuff(zodiac.id),
+    ],
+    [villager, watson, matador, zodiac, lecter],
+    1,
+  );
+  assert.deepEqual(result.leaveIds, [villager.id]);
+  assert.equal(result.notes.some((note) => /matador blocked watson/i.test(note)), true);
+  assert.equal(result.notes.some((note) => /handcuffs disabled zodiac/i.test(note)), true);
+});
+
+test("Handcuffs on Kane last night prevents the delayed leave", () => {
+  const kane = player("k", "kane", "citizen");
+  const result = resolveNight(
+    [act("kane", lecter.id, 1), cuff(kane.id, 1)],
+    [kane, lecter],
+    2,
+  );
+  assert.deepEqual(result.leaveIds, []);
+});
+

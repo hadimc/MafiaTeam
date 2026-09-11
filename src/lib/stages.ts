@@ -77,7 +77,7 @@ const DAY_TASKS: StageTask[] = [
     nameEn: "Exit card",
     nameFa: "کارت کشیدن",
     summaryEn: "The person voted out draws one remaining exit card. Hold to peek. Drawn cards leave the deck.",
-    notesEn: "Day-vote exits.",
+    notesEn: "Day-vote exits. If Handcuffs is drawn, pick any living player — they cannot use their night ability tonight.",
   },
   {
     key: "removePlayers",
@@ -417,6 +417,7 @@ export const NIGHT_REPLACEABLE = [
   "constantine",
   "gunner",
   "zodiac",
+  "handcuffs",
 ] as const;
 
 export type NightPickAction = {
@@ -485,6 +486,64 @@ export function tonightTarget(actions: NightPickAction[], dayNumber: number, act
   return tonightPicks(actions, dayNumber).get(actionType) ?? null;
 }
 
+/** Last Handcuffs pick for that day (drawn on the day, applies to that day's night). */
+export function handcuffsTarget(actions: NightPickAction[], dayNumber: number) {
+  let found: string | null = null;
+  for (const action of actions) {
+    if (action.dayNumber !== dayNumber || action.actionType !== "handcuffs") continue;
+    if (!action.targetPlayerId) continue;
+    found = action.targetPlayerId;
+  }
+  return found;
+}
+
+export type NightDisable = {
+  id: string;
+  roleKey: string;
+  source: "matador" | "handcuffs";
+};
+
+export function nightActionTypesForRole(roleKey: string | null | undefined) {
+  if (!roleKey) return [] as string[];
+  const types = Object.entries(NIGHT_ACTION_ROLE)
+    .filter(([, role]) => role === roleKey)
+    .map(([type]) => type);
+  if (roleKey === "godfather") types.push("mafiaShot");
+  if (roleKey === "jack") types.push("jack");
+  return types;
+}
+
+/** Players who cannot use a night ability tonight: Handcuffs and/or Matador. Cuffing Matador cancels Matador's block. */
+export function nightDisables(
+  actions: NightPickAction[],
+  players: NightPlayer[],
+  nightNumber: number,
+): NightDisable[] {
+  const byId = new Map(players.map((player) => [player.id, player]));
+  const disables: NightDisable[] = [];
+  const cuffId = handcuffsTarget(actions, nightNumber);
+  const cuffed = cuffId ? byId.get(cuffId) : undefined;
+  if (cuffed) {
+    disables.push({ id: cuffed.id, roleKey: cuffed.roleKey, source: "handcuffs" });
+  }
+  const matadorApplies = cuffed?.roleKey !== "matador" && livingHolds(players, "matador");
+  const blockedId = matadorApplies ? tonightTarget(actions, nightNumber, "matador") : null;
+  const blocked = blockedId ? byId.get(blockedId) : undefined;
+  if (blocked && blocked.id !== cuffed?.id) {
+    disables.push({ id: blocked.id, roleKey: blocked.roleKey, source: "matador" });
+  }
+  return disables;
+}
+
+export function roleDisabledOnNight(
+  actions: NightPickAction[],
+  players: NightPlayer[],
+  nightNumber: number,
+  roleKey: string,
+) {
+  return nightDisables(actions, players, nightNumber).find((item) => item.roleKey === roleKey);
+}
+
 export function tonightAction(actions: NightPickAction[], dayNumber: number, actionType: string) {
   let found: NightPickAction | null = null;
   for (const action of actions) {
@@ -526,9 +585,10 @@ export function resolveNight(
   const picks = tonightPicks(actions, nightNumber);
   const dropped = dropDeadRolePicks(picks, players);
   const byId = new Map(players.map((player) => [player.id, player]));
-  const blockedId = picks.get("matador");
-  const blockedRole = blockedId ? byId.get(blockedId)?.roleKey ?? null : null;
-  const ability = (role: string, key: string) => (blockedRole === role ? undefined : picks.get(key));
+  const disables = nightDisables(actions, players, nightNumber);
+  const disabledRoles = new Set(disables.map((item) => item.roleKey));
+  const disableOf = (role: string) => disables.find((item) => item.roleKey === role);
+  const ability = (role: string, key: string) => (disabledRoles.has(role) ? undefined : picks.get(key));
 
   const watsonPick = picks.get("watson");
   const watsonSave = ability("watson", "watson");
@@ -537,8 +597,8 @@ export function resolveNight(
   const constantineId = ability("constantine", "constantine");
   const mafiaShotPick = picks.get("mafiaShot");
   const sixthPick = picks.get("sixthSense");
-  const mafiaShotId = blockedRole === "godfather" ? undefined : mafiaShotPick;
-  const sixthId = blockedRole === "godfather" ? undefined : sixthPick;
+  const mafiaShotId = disabledRoles.has("godfather") ? undefined : mafiaShotPick;
+  const sixthId = disabledRoles.has("godfather") ? undefined : sixthPick;
 
   const leave = new Set<string>();
   const shieldBreakIds: string[] = [];
@@ -560,29 +620,83 @@ export function resolveNight(
     if (note) notes.push(note);
   }
 
-  if (blockedRole === "watson" && watsonPick) {
-    notes.push("Matador blocked Watson. That save does not apply.");
-  }
-  if (blockedRole === "leon" && picks.get("leon")) {
-    notes.push("Matador blocked Leon. That shot does not apply.");
-  }
-  if (blockedRole === "lecter" && picks.get("lecter")) {
-    notes.push("Matador blocked Lecter. That save does not apply.");
-  }
-  if (blockedRole === "kane" && picks.get("kane")) {
-    notes.push("Matador blocked Kane. That coupon does not apply.");
-  }
-  if (blockedRole === "constantine" && picks.get("constantine")) {
-    notes.push("Matador blocked Constantine. Nobody returns.");
-  }
-  if (blockedRole === "godfather" && (mafiaShotPick || sixthPick)) {
-    notes.push("Matador blocked the Godfather. The mafia main action does not apply.");
-  }
-  if (blockedRole === "zodiac" && picks.get("zodiac")) {
-    notes.push("Matador blocked Zodiac. That shot does not apply.");
-  }
-  if (blockedId && notes.every((note) => !/matador blocked/i.test(note))) {
-    notes.push("Matador disabled that player. They cannot act tonight.");
+  const pushDisableNote = (
+    roleKey: string,
+    hadPick: boolean,
+    matadorNote: string,
+    handcuffsNote: string,
+  ) => {
+    if (!hadPick) return;
+    const hit = disableOf(roleKey);
+    if (!hit) return;
+    notes.push(hit.source === "handcuffs" ? handcuffsNote : matadorNote);
+  };
+  pushDisableNote(
+    "watson",
+    Boolean(watsonPick),
+    "Matador blocked Watson. That save does not apply.",
+    "Handcuffs disabled Watson. That save does not apply.",
+  );
+  pushDisableNote(
+    "leon",
+    Boolean(picks.get("leon")),
+    "Matador blocked Leon. That shot does not apply.",
+    "Handcuffs disabled Leon. That shot does not apply.",
+  );
+  pushDisableNote(
+    "lecter",
+    Boolean(picks.get("lecter")),
+    "Matador blocked Lecter. That save does not apply.",
+    "Handcuffs disabled Lecter. That save does not apply.",
+  );
+  pushDisableNote(
+    "kane",
+    Boolean(picks.get("kane")),
+    "Matador blocked Kane. That coupon does not apply.",
+    "Handcuffs disabled Kane. That coupon does not apply.",
+  );
+  pushDisableNote(
+    "constantine",
+    Boolean(picks.get("constantine")),
+    "Matador blocked Constantine. Nobody returns.",
+    "Handcuffs disabled Constantine. Nobody returns.",
+  );
+  pushDisableNote(
+    "godfather",
+    Boolean(mafiaShotPick || sixthPick),
+    "Matador blocked the Godfather. The mafia main action does not apply.",
+    "Handcuffs disabled the Godfather. The mafia main action does not apply.",
+  );
+  pushDisableNote(
+    "saul",
+    Boolean(picks.get("saul")),
+    "Matador blocked Saul. That purchase does not apply.",
+    "Handcuffs disabled Saul. That purchase does not apply.",
+  );
+  pushDisableNote(
+    "zodiac",
+    Boolean(picks.get("zodiac")),
+    "Matador blocked Zodiac. That shot does not apply.",
+    "Handcuffs disabled Zodiac. That shot does not apply.",
+  );
+  pushDisableNote(
+    "matador",
+    Boolean(picks.get("matador")),
+    "Matador blocked Matador. That block does not apply.",
+    "Handcuffs disabled Matador. That block does not apply.",
+  );
+  for (const hit of disables) {
+    const mentioned =
+      hit.source === "handcuffs"
+        ? notes.some((note) => /handcuffs disabled/i.test(note))
+        : notes.some((note) => /matador blocked|matador disabled/i.test(note));
+    if (!mentioned) {
+      notes.push(
+        hit.source === "handcuffs"
+          ? "Handcuffs disabled that player. They cannot act tonight."
+          : "Matador disabled that player. They cannot act tonight.",
+      );
+    }
   }
 
   if (mafiaShotId) {
@@ -677,7 +791,9 @@ export function resolveNight(
 
   if (nightNumber >= 2 && kanePlayer && kanePlayer.alive !== false) {
     const prev = tonightPicks(actions, nightNumber - 1);
-    const prevKaneTargetId = prev.get("matador") === kanePlayer.id ? undefined : prev.get("kane");
+    const prevKaneTargetId = roleDisabledOnNight(actions, players, nightNumber - 1, "kane")
+      ? undefined
+      : prev.get("kane");
     if (prevKaneTargetId) {
       const marked = byId.get(prevKaneTargetId);
       if (marked?.faction === "mafia") {

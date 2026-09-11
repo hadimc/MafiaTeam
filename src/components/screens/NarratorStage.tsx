@@ -12,12 +12,14 @@ import {
   gunnerActiveHolders,
   gunnerAmmo,
   gunnerBulletType,
+  handcuffsTarget,
   jackCurseRound,
   lastNightReport,
   lecterSelfSaved,
   mafiaLikeOrder,
   mafiaLostAMember,
   mafiaMainTonight,
+  nightDisables,
   nightLine,
   nightTasks,
   nextStage,
@@ -25,6 +27,7 @@ import {
   prevStage,
   publicPlayerIds,
   resolveNight,
+  roleDisabledOnNight,
   scenarioRoleKeys,
   stageFromGame,
   stageSubtitle,
@@ -96,6 +99,26 @@ function Hint({ className, children }: { className?: string; children: React.Rea
   return <p className={className ?? "text-[12px] text-muted"}>{children}</p>;
 }
 
+function disableForRole(game: Game, roleKey: string, name: (player?: Player) => string) {
+  const hit = roleDisabledOnNight(game.actions, game.players, game.currentDay, roleKey);
+  if (!hit) return null;
+  const player = game.players.find((item) => item.id === hit.id);
+  if (!player) return null;
+  return { who: `${name(player)} (${player.roleNameEn})`, source: hit.source, player };
+}
+
+function handcuffsDrawnToday(actions: Game["actions"], dayNumber: number) {
+  if (handcuffsTarget(actions, dayNumber)) return true;
+  return actions.some((action) => {
+    if (action.actionType !== "exit_card" || action.dayNumber !== dayNumber) return false;
+    try {
+      return (JSON.parse(action.metadata || "{}") as { key?: string }).key === "handcuffs";
+    } catch {
+      return false;
+    }
+  });
+}
+
 export function NarratorStage({ game }: { game: Game }) {
   const { t } = useLang();
   const [open, setOpen] = useState<string | null>(null);
@@ -134,6 +157,8 @@ export function NarratorStage({ game }: { game: Game }) {
           game.actions.find((action) => action.actionType === "faceChange")?.dayNumber ?? null,
         );
   const name = (player?: Player) => (!player ? "—" : enName(player.user));
+  const cuffedId = handcuffsTarget(game.actions, game.currentDay);
+  const cuffed = living.find((player) => player.id === cuffedId);
   const counts = {
     citizen: living.filter((player) => player.faction === "citizen").length,
     mafia: living.filter((player) => player.faction === "mafia").length,
@@ -194,8 +219,19 @@ export function NarratorStage({ game }: { game: Game }) {
         dead={dead}
         name={name}
         onToggle={overrideSeat}
-        blockedId={tonightTarget(game.actions, game.currentDay, "matador")}
+        disableIds={nightDisables(game.actions, game.players, game.currentDay).map((item) => item.id)}
       />
+      {cuffed ? (
+        <div className="mt-3 rounded-2xl border border-gold/40 bg-gold/10 px-4 py-3">
+          <p className="text-[11px] uppercase tracking-[0.22em] text-gold">Handcuffs tonight</p>
+          <p dir="rtl" lang="fa" className="farsi mt-1 text-sm text-gold">
+            دستبند امشب
+          </p>
+          <p className="mt-1 text-sm font-semibold">
+            {name(cuffed)} ({cuffed.roleNameEn}) cannot use a night ability.
+          </p>
+        </div>
+      ) : null}
 
       <ol className="mt-5 space-y-2">
         {tasks.map((task, index) => (
@@ -384,9 +420,7 @@ function TaskBody({
   );
   const curses = jackCurseRound(game.actions, living, game.currentDay);
   const byId = new Map(game.players.map((player) => [player.id, player]));
-  const matadorBlocked = game.players.find(
-    (player) => player.id === tonightTarget(game.actions, game.currentDay, "matador"),
-  );
+  const jackDisabled = disableForRole(game, "jack", name);
   const night = lastNightReport(game.actions, game.currentDay, game.players);
   const inquiriesUsed = game.actions.filter((action) => action.actionType === "inquiry").length;
   const mafiaLikes = mafiaLikeOrder(living);
@@ -474,8 +508,8 @@ function TaskBody({
       {task.key === "jack" ? (
         <>
           <AbilityHeader label="Jack" holder={living.find((player) => player.roleKey === "jack")} name={name} />
-          {matadorBlocked?.roleKey === "jack" ? (
-            <CannotActNote who={`${name(matadorBlocked)} (${matadorBlocked.roleNameEn})`} />
+          {jackDisabled ? (
+            <CannotActNote who={jackDisabled.who} source={jackDisabled.source} />
           ) : lineFor("jack") === "record" && !jackShown ? (
             <JackCurse
               gameId={game.id}
@@ -537,20 +571,48 @@ function TaskBody({
       ) : null}
 
       {task.key === "exitCard" ? (
-        remainingCards.length === 0 ? (
+        remainingCards.length === 0 && !handcuffsDrawnToday(game.actions, game.currentDay) ? (
           <p className="text-xs text-muted">No exit cards left in the deck.</p>
         ) : (
-          <div className="grid grid-cols-5 gap-2">
-            {remainingCards.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                className="playing-card card-pattern min-h-16 rounded-xl text-sm font-semibold text-gold"
-                onClick={() => onExitCard(item)}
-                aria-label={item.nameEn}
-              />
-            ))}
-          </div>
+          <>
+            {remainingCards.length === 0 ? (
+              <p className="text-xs text-muted">No exit cards left in the deck.</p>
+            ) : (
+              <div className="grid grid-cols-5 gap-2">
+                {remainingCards.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className="playing-card card-pattern min-h-16 rounded-xl text-sm font-semibold text-gold"
+                    onClick={() => onExitCard(item)}
+                    aria-label={item.nameEn}
+                  />
+                ))}
+              </div>
+            )}
+            {handcuffsDrawnToday(game.actions, game.currentDay) ? (
+              <div className="space-y-2">
+                <p className="text-sm font-semibold">Handcuffs — pick any living player</p>
+                <p dir="rtl" lang="fa" className="farsi text-sm text-gold">
+                  دستبند — یک بازیکن زنده را انتخاب کنید
+                </p>
+                <Hint>
+                  Citizen, Mafia, or independent — including Matador. They cannot use their night ability
+                  tonight.
+                </Hint>
+                <PickList
+                  label="Disable tonight — tap another name to change"
+                  players={living}
+                  name={name}
+                  showRole
+                  selectedId={handcuffsTarget(game.actions, game.currentDay)}
+                  onPick={(player) =>
+                    void recordStageAction(game.id, "handcuffs", `Handcuffs → ${name(player)}`, player.id)
+                  }
+                />
+              </div>
+            ) : null}
+          </>
         )
       ) : null}
 
@@ -869,9 +931,7 @@ function ZodiacShot({
   );
   const zodiac = living.find((player) => player.roleKey === "zodiac");
   const target = tonightTarget(game.actions, game.currentDay, "zodiac");
-  const blocked = game.players.find(
-    (player) => player.id === tonightTarget(game.actions, game.currentDay, "matador"),
-  );
+  const blocked = disableForRole(game, "zodiac", name);
   const preview = resolveNight(game.actions, game.players, game.currentDay);
   const notes = preview.notes.filter((note) => /zodiac/i.test(note));
   return (
@@ -883,8 +943,8 @@ function ZodiacShot({
         ) : (
           <Hint className="text-xs text-muted">Say the line. Nothing to record.</Hint>
         )
-      ) : blocked?.roleKey === "zodiac" ? (
-        <CannotActNote who={`${name(blocked)} (${blocked.roleNameEn})`} />
+      ) : blocked ? (
+        <CannotActNote who={blocked.who} source={blocked.source} />
       ) : line === "record" && zodiac ? (
         <>
           <PickList
@@ -961,6 +1021,7 @@ function PickList({
   selectedId,
   showRole = false,
   markedId,
+  markedIds,
   markedNote,
 }: {
   label: string;
@@ -970,6 +1031,7 @@ function PickList({
   selectedId?: string | null;
   showRole?: boolean;
   markedId?: string | null;
+  markedIds?: string[];
   markedNote?: string;
 }) {
   if (players.length === 0) return null;
@@ -992,7 +1054,7 @@ function PickList({
               {showRole ? (
                 <span className="block truncate text-[11px] text-muted">{player.roleNameEn || player.roleName}</span>
               ) : null}
-              {markedId === player.id && markedNote ? (
+              {(markedId === player.id || markedIds?.includes(player.id)) && markedNote ? (
                 <span className="block truncate text-[11px] font-semibold text-gold">{markedNote}</span>
               ) : null}
             </span>
@@ -1008,13 +1070,13 @@ function SeatOverride({
   dead,
   name,
   onToggle,
-  blockedId,
+  disableIds,
 }: {
   living: Player[];
   dead: Player[];
   name: (player?: Player) => string;
   onToggle: (playerId: string, currentlyAlive: boolean) => void;
-  blockedId?: string | null;
+  disableIds?: string[];
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -1034,7 +1096,7 @@ function SeatOverride({
             players={living}
             name={name}
             showRole
-            markedId={blockedId}
+            markedIds={disableIds}
             markedNote="Cannot act tonight"
             onPick={(player) => onToggle(player.id, true)}
           />
@@ -1080,6 +1142,7 @@ function NightAbility({
   title,
   line,
   blocked,
+  blockedSource,
   holder,
   name,
   children,
@@ -1087,6 +1150,7 @@ function NightAbility({
   title: string;
   line: NightLine;
   blocked?: string | null;
+  blockedSource?: "matador" | "handcuffs";
   holder?: Player | null;
   name: (player?: Player) => string;
   children: React.ReactNode;
@@ -1098,7 +1162,7 @@ function NightAbility({
       {line === "cover" ? (
         <Hint className="text-xs text-muted">Say the line. Nothing to record.</Hint>
       ) : blocked ? (
-        <CannotActNote who={blocked} />
+        <CannotActNote who={blocked} source={blockedSource} />
       ) : (
         children
       )}
@@ -1106,7 +1170,13 @@ function NightAbility({
   );
 }
 
-function CannotActNote({ who }: { who: string }) {
+function CannotActNote({
+  who,
+  source,
+}: {
+  who: string;
+  source?: "matador" | "handcuffs";
+}) {
   return (
     <div className="rounded-2xl border border-gold/50 bg-gold/10 px-4 py-3">
       <p className="text-[11px] uppercase tracking-[0.22em] text-gold">Cannot act tonight</p>
@@ -1114,7 +1184,11 @@ function CannotActNote({ who }: { who: string }) {
         امشب توانایی ندارد
       </p>
       <p className="mt-2 text-sm font-semibold">{who}</p>
-      <Hint className="mt-1 text-xs text-muted">Matador took this ability. Say the line. Do not record.</Hint>
+      <Hint className="mt-1 text-xs text-muted">
+        {source === "handcuffs"
+          ? "Handcuffs took this ability. Say the line. Do not record."
+          : "Matador took this ability. Say the line. Do not record."}
+      </Hint>
     </div>
   );
 }
@@ -1135,15 +1209,17 @@ function MafiaNight({
   const saulUsed = game.actions.some(
     (action) => action.actionType === "saul" && action.dayNumber !== game.currentDay,
   );
-  const blocked = game.players.find(
-    (player) => player.id === tonightTarget(game.actions, game.currentDay, "matador"),
-  );
-  const blockedRole = blocked?.roleKey;
+  const godfatherDisabled = disableForRole(game, "godfather", name);
+  const saulDisabled = disableForRole(game, "saul", name);
+  const lecterDisabled = disableForRole(game, "lecter", name);
+  const matadorDisabled = disableForRole(game, "matador", name);
+  const matadorTargetId = tonightTarget(game.actions, game.currentDay, "matador");
+  const matadorTarget = game.players.find((player) => player.id === matadorTargetId);
   const saulIn = living.some((player) => player.roleKey === "saul");
   const lostMafia = mafiaLostAMember(game.players);
-  const canShot = living.some((player) => player.faction === "mafia") && blockedRole !== "godfather";
-  const canSixth = living.some((player) => player.roleKey === "godfather") && blockedRole !== "godfather";
-  const canBuy = saulIn && lostMafia && !saulUsed && blockedRole !== "saul";
+  const canShot = living.some((player) => player.faction === "mafia") && !godfatherDisabled;
+  const canSixth = living.some((player) => player.roleKey === "godfather") && !godfatherDisabled;
+  const canBuy = saulIn && lostMafia && !saulUsed && !saulDisabled;
   const lecter = living.find((player) => player.roleKey === "lecter");
   const matador = living.find((player) => player.roleKey === "matador");
   const lecterSelfUsed = Boolean(
@@ -1178,13 +1254,13 @@ function MafiaNight({
       </Hint>
       <div>
         <p className="mb-2 text-sm font-bold text-ink">Main action — pick one</p>
-        {blockedRole === "godfather" && blocked ? (
-          <CannotActNote who={`${name(blocked)} (${blocked.roleNameEn})`} />
+        {godfatherDisabled ? (
+          <CannotActNote who={godfatherDisabled.who} source={godfatherDisabled.source} />
         ) : null}
         {saulIn && !lostMafia && !saulUsed ? (
           <p className="mt-2 text-xs text-muted">Purchase unlocks after Mafia has lost a member.</p>
         ) : null}
-        {options.length === 0 && blockedRole !== "godfather" ? (
+        {options.length === 0 && !godfatherDisabled ? (
           <>
             <p className="text-xs text-muted">Mafia is out.</p>
             <Hint className="text-xs text-muted">Say the line if the table should not know. Nothing to record.</Hint>
@@ -1288,7 +1364,8 @@ function MafiaNight({
       <NightAbility
         title="Lecter save"
         line={lineFor("lecter")}
-        blocked={blockedRole === "lecter" && blocked ? `${name(blocked)} (${blocked.roleNameEn})` : null}
+        blocked={lecterDisabled?.who}
+        blockedSource={lecterDisabled?.source}
         holder={lecter}
         name={name}
       >
@@ -1304,18 +1381,27 @@ function MafiaNight({
           <p className="mt-2 text-xs text-gold">Self-save (once). Lecter cannot do this again.</p>
         ) : null}
       </NightAbility>
-      <NightAbility title="Matador disability" line={lineFor("matador")} holder={matador} name={name}>
+      <NightAbility
+        title="Matador disability"
+        line={lineFor("matador")}
+        blocked={matadorDisabled?.who}
+        blockedSource={matadorDisabled?.source}
+        holder={matador}
+        name={name}
+      >
         <PickList
           label="Block — tap again to change"
           players={living.filter((player) => player.faction !== "mafia")}
           name={name}
-          selectedId={blocked?.id}
-          markedId={blocked?.id}
+          selectedId={matadorTarget?.id}
+          markedId={matadorTarget?.id}
           markedNote="Cannot act tonight"
           showRole
           onPick={(player) => recordStageAction(game.id, "matador", `Matador block → ${name(player)}`, player.id)}
         />
-        {blocked ? <CannotActNote who={`${name(blocked)} (${blocked.roleNameEn})`} /> : null}
+        {matadorTarget ? (
+          <CannotActNote who={`${name(matadorTarget)} (${matadorTarget.roleNameEn})`} source="matador" />
+        ) : null}
       </NightAbility>
     </div>
   );
@@ -1368,11 +1454,10 @@ function TownNight({
   const leonNotes = preview.notes.filter((note) => /leon|citizen hit|lecter|shield/i.test(note));
   const leonLine = lineFor("leon");
   const leonSpent = leonNights.size >= 2;
-  const blocked = game.players.find(
-    (player) => player.id === tonightTarget(game.actions, game.currentDay, "matador"),
-  );
-  const blockedRole = blocked?.roleKey;
-  const blockedWho = blocked ? `${name(blocked)} (${blocked.roleNameEn})` : null;
+  const watsonDisabled = disableForRole(game, "watson", name);
+  const leonDisabled = disableForRole(game, "leon", name);
+  const kaneDisabled = disableForRole(game, "kane", name);
+  const gunnerDisabled = disableForRole(game, "gunner", name);
 
   return (
     <div className="space-y-4">
@@ -1382,7 +1467,8 @@ function TownNight({
       <NightAbility
         title="Dr. Watson — save"
         line={lineFor("watson")}
-        blocked={blockedRole === "watson" ? blockedWho : null}
+        blocked={watsonDisabled?.who}
+        blockedSource={watsonDisabled?.source}
         holder={watson}
         name={name}
       >
@@ -1403,8 +1489,8 @@ function TownNight({
             ) : (
               <Hint className="text-xs text-muted">Say the line. Nothing to record.</Hint>
             )
-          ) : blockedRole === "leon" && blockedWho ? (
-            <CannotActNote who={blockedWho} />
+          ) : leonDisabled ? (
+            <CannotActNote who={leonDisabled.who} source={leonDisabled.source} />
           ) : (
             <>
               <PickList
@@ -1443,8 +1529,8 @@ function TownNight({
             ) : (
               <Hint className="text-xs text-muted">Say the line. Nothing to record.</Hint>
             )
-          ) : blockedRole === "kane" && blockedWho ? (
-            <CannotActNote who={blockedWho} />
+          ) : kaneDisabled ? (
+            <CannotActNote who={kaneDisabled.who} source={kaneDisabled.source} />
           ) : (
             <>
               <PickList
@@ -1488,7 +1574,8 @@ function TownNight({
             living={living}
             name={name}
             line={lineFor("gunner")}
-            blockedWho={blockedRole === "gunner" ? blockedWho : null}
+            blockedWho={gunnerDisabled?.who ?? null}
+            blockedSource={gunnerDisabled?.source}
           />
         </div>
       )}
@@ -1500,6 +1587,7 @@ function TownNight({
         const spent = item.once && usedBefore;
         const selectedId = tonightTarget(game.actions, game.currentDay, item.key);
         if (line === "skip") return null;
+        const extraDisabled = disableForRole(game, item.key, name);
         const holder = living.find((player) => player.roleKey === item.key);
         return (
           <div key={item.key}>
@@ -1510,8 +1598,8 @@ function TownNight({
               ) : (
                 <Hint className="text-xs text-muted">Say the line. Nothing to record.</Hint>
               )
-            ) : blockedRole === item.key && blockedWho ? (
-              <CannotActNote who={blockedWho} />
+            ) : extraDisabled ? (
+              <CannotActNote who={extraDisabled.who} source={extraDisabled.source} />
             ) : (
               <>
                 <PickList
@@ -1547,12 +1635,14 @@ function GunnerNight({
   name,
   line,
   blockedWho,
+  blockedSource,
 }: {
   game: Game;
   living: Player[];
   name: (player?: Player) => string;
   line: NightLine;
   blockedWho: string | null;
+  blockedSource?: "matador" | "handcuffs";
 }) {
   const [bulletPick, setBulletPick] = useState<GunnerBullet | null>(null);
   const gunner = living.find((player) => player.roleKey === "gunner");
@@ -1564,7 +1654,7 @@ function GunnerNight({
   if (line === "cover" || !gunner) {
     return <Hint className="text-xs text-muted">Say the line. Nothing to record.</Hint>;
   }
-  if (blockedWho) return <CannotActNote who={blockedWho} />;
+  if (blockedWho) return <CannotActNote who={blockedWho} source={blockedSource} />;
   if (ammo.fakeLeft === 0 && ammo.realLeft === 0) {
     return <p className="text-xs text-muted">Out of ammunition. Still say the line.</p>;
   }

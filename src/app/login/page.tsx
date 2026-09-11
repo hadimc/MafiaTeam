@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Suspense, useActionState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useLang } from "@/lib/lang";
@@ -43,6 +44,11 @@ function LoginForm() {
           <Button type="submit" disabled={pending} className="mt-2">
             {t("login")}
           </Button>
+          <p className="pt-1 text-center text-sm">
+            <Link href="/forgot" className="text-gold">
+              {t("forgotPassword")}
+            </Link>
+          </p>
         </Panel>
       </form>
     </div>

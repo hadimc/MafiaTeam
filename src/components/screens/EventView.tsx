@@ -30,6 +30,7 @@ import {
   eventLane,
   factionLabel,
   gameOverview,
+  hasFinalizedScenario,
   isJoinable,
   isRosterOpen,
   sideLine,
@@ -297,6 +298,20 @@ export function EventView({
           </div>
         ) : null}
       </Panel>
+
+      {hasFinalizedScenario(event.status) && event.scenario ? (
+        <Panel className="space-y-3">
+          <h2 className="display text-lg font-semibold">{t("scenarioBriefing")}</h2>
+          <p className="text-sm text-muted">{t("scenarioBriefingHint")}</p>
+          <Button href={`/events/${event.slug}/briefing`}>{t("openBriefing")}</Button>
+          <ShareJoinLink
+            slug={event.slug}
+            path={`/events/${event.slug}/briefing`}
+            label={t("shareBriefing")}
+            hint={t("shareBriefingHint")}
+          />
+        </Panel>
+      ) : null}
 
       {user.isAdmin && game && (!amNarrator || past) ? (
         adminDanger === "end" ? (
