@@ -1128,7 +1128,10 @@ function MafiaNight({
     ...(canSixth ? [{ key: "sixthSense" as const, label: "Sixth sense" }] : []),
     ...(canBuy ? [{ key: "saul" as const, label: "Purchase" }] : []),
   ];
-  const requested = main ?? (taken?.actionType as "mafiaShot" | "sixthSense" | "saul" | undefined) ?? null;
+  const requested =
+    main ??
+    (taken?.actionType as "mafiaShot" | "sixthSense" | "saul" | undefined) ??
+    (canShot ? "mafiaShot" : null);
   const selectedMain = options.some((option) => option.key === requested) ? requested : null;
   return (
     <div className="space-y-4">
