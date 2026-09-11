@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import Link from "next/link";
 import { useLang, enName } from "@/lib/lang";
 import { Button, Panel, SeatAvatar } from "@/components/ui";
@@ -73,12 +73,21 @@ type Game = {
   status: string;
   winningFaction: string | null;
   scenarioSnapshot: string;
-  event: { title: string; titleEn: string; slug: string };
+  event: { title: string; titleEn: string; slug: string; showHints: boolean };
   players: Player[];
   votes: { voteType: string; dayNumber: number; targetPlayerId: string; count: number }[];
   draws: { playerId: string; cardName: string; cardNameEn: string }[];
   actions: { id: string; actionType: string; messageEn: string; message: string; dayNumber: number; phase: string; targetPlayerId: string | null; metadata?: string | null }[];
 };
+
+const HintsContext = createContext(false);
+
+/** Script/reminder text for the narrator. Hidden unless the event's "show hints" setting is on. */
+function Hint({ className, children }: { className?: string; children: React.ReactNode }) {
+  const show = useContext(HintsContext);
+  if (!show) return null;
+  return <p className={className ?? "text-[12px] text-muted"}>{children}</p>;
+}
 
 export function NarratorStage({ game }: { game: Game }) {
   const { t } = useLang();
@@ -142,6 +151,7 @@ export function NarratorStage({ game }: { game: Game }) {
   }
 
   return (
+    <HintsContext.Provider value={game.event.showHints}>
     <div className="flex flex-1 flex-col pb-28">
       <header className="sticky top-0 z-20 -mx-5 space-y-3 border-b border-line bg-bg/95 px-5 py-4 backdrop-blur-md">
         <div className="flex items-center justify-between gap-3">
@@ -321,6 +331,7 @@ export function NarratorStage({ game }: { game: Game }) {
         </div>
       ) : null}
     </div>
+    </HintsContext.Provider>
   );
 }
 
@@ -376,15 +387,13 @@ function TaskBody({
 
   return (
     <Panel className="mt-2 space-y-3">
-      <p className="text-sm">
+      <Hint className="text-sm">
         {task.key === "mafia" ? mafiaSummary : task.key === "town" ? townSummary : task.summaryEn}
-      </p>
-      {introNight && (task.key === "mafia" || task.key === "town") ? null : (
-        <p className="text-[12px] text-muted">{task.notesEn}</p>
-      )}
+      </Hint>
+      {introNight && (task.key === "mafia" || task.key === "town") ? null : <Hint>{task.notesEn}</Hint>}
 
       {task.key === "speak" || task.key === "defense" ? (
-        <p className="text-xs text-gold">Use the 1 min / 30 sec timers at the bottom.</p>
+        <Hint className="text-xs text-gold">Use the 1 min / 30 sec timers at the bottom.</Hint>
       ) : null}
 
       {task.key === "nightBrief" ? (
@@ -421,7 +430,7 @@ function TaskBody({
             }
           />
         ) : (
-          <p className="text-xs text-muted">Say the line. Nothing to record.</p>
+          <Hint className="text-xs text-muted">Say the line. Nothing to record.</Hint>
         )
       ) : null}
 
@@ -435,10 +444,10 @@ function TaskBody({
             byId={byId}
             frozen={false}
           />
+        ) : jackShown ? (
+          <p className="text-xs text-muted">The curse stays where it is.</p>
         ) : (
-          <p className="text-xs text-muted">
-            {jackShown ? "The curse stays where it is." : "Say the line. Nothing to record."}
-          </p>
+          <Hint className="text-xs text-muted">Say the line. Nothing to record.</Hint>
         )
       ) : null}
 
@@ -908,7 +917,7 @@ function NightAbility({
     <div>
       <p className="mb-2 text-[11px] uppercase tracking-wide text-muted">{title}</p>
       {line === "cover" ? (
-        <p className="text-xs text-muted">Say the line. Nothing to record.</p>
+        <Hint className="text-xs text-muted">Say the line. Nothing to record.</Hint>
       ) : blocked ? (
         <CannotActNote who={blocked} />
       ) : (
@@ -926,7 +935,7 @@ function CannotActNote({ who }: { who: string }) {
         امشب توانایی ندارد
       </p>
       <p className="mt-2 text-sm font-semibold">{who}</p>
-      <p className="mt-1 text-xs text-muted">Matador took this ability. Say the line. Do not record.</p>
+      <Hint className="mt-1 text-xs text-muted">Matador took this ability. Say the line. Do not record.</Hint>
     </div>
   );
 }
@@ -977,14 +986,19 @@ function MafiaNight({
   const selectedMain = options.some((option) => option.key === requested) ? requested : null;
   return (
     <div className="space-y-4">
-      <p className="text-xs text-gold">Say the list for roles in this scenario. Tap a different name to correct it. Nobody leaves yet.</p>
+      <Hint className="text-xs text-gold">
+        Say the list for roles in this scenario. Tap a different name to correct it. Nobody leaves yet.
+      </Hint>
       <div>
         <p className="mb-2 text-[11px] uppercase tracking-wide text-muted">Main action — pick one</p>
         {blockedRole === "godfather" && blocked ? (
           <CannotActNote who={`${name(blocked)} (${blocked.roleNameEn})`} />
         ) : null}
         {options.length === 0 && blockedRole !== "godfather" ? (
-          <p className="text-xs text-muted">Mafia is out. Say the line if the table should not know. Nothing to record.</p>
+          <>
+            <p className="text-xs text-muted">Mafia is out.</p>
+            <Hint className="text-xs text-muted">Say the line if the table should not know. Nothing to record.</Hint>
+          </>
         ) : options.length > 0 ? (
           <>
             <div className={`grid gap-2 ${options.length === 3 ? "grid-cols-3" : options.length === 2 ? "grid-cols-2" : "grid-cols-1"}`}>
@@ -1159,7 +1173,9 @@ function TownNight({
 
   return (
     <div className="space-y-4">
-      <p className="text-xs text-gold">Say the list for roles in this scenario. Tap a different name to correct a mistake. Removals wait until Next.</p>
+      <Hint className="text-xs text-gold">
+        Say the list for roles in this scenario. Tap a different name to correct a mistake. Removals wait until Next.
+      </Hint>
       <NightAbility title="Dr. Watson — save" line={lineFor("watson")} blocked={blockedRole === "watson" ? blockedWho : null}>
         <PickList
           label="Save — tap again to change"
@@ -1173,9 +1189,11 @@ function TownNight({
         <div>
           <p className="mb-2 text-[11px] uppercase tracking-wide text-muted">Leon — shot</p>
           {leonLine === "cover" || leonSpent || !leon ? (
-            <p className="text-xs text-muted">
-              {leonSpent ? "Leon’s two shots are spent. Still say the line." : "Say the line. Nothing to record."}
-            </p>
+            leonSpent ? (
+              <p className="text-xs text-muted">Leon’s two shots are spent.</p>
+            ) : (
+              <Hint className="text-xs text-muted">Say the line. Nothing to record.</Hint>
+            )
           ) : blockedRole === "leon" && blockedWho ? (
             <CannotActNote who={blockedWho} />
           ) : (
@@ -1211,9 +1229,11 @@ function TownNight({
         <div>
           <p className="mb-2 text-[11px] uppercase tracking-wide text-muted">Citizen Kane — coupon</p>
           {kaneLine === "cover" || kaneUsed || !kane ? (
-            <p className="text-xs text-muted">
-              {kaneUsed ? "Coupon already used. Still say the line." : "Say the line. Nothing to record."}
-            </p>
+            kaneUsed ? (
+              <p className="text-xs text-muted">Coupon already used.</p>
+            ) : (
+              <Hint className="text-xs text-muted">Say the line. Nothing to record.</Hint>
+            )
           ) : blockedRole === "kane" && blockedWho ? (
             <CannotActNote who={blockedWho} />
           ) : (
@@ -1248,7 +1268,7 @@ function TownNight({
       {detectiveLine === "skip" ? null : (
         <div>
           <p className="mb-2 text-[11px] uppercase tracking-wide text-muted">Detective</p>
-          <p className="text-xs text-muted">Say the line. Do not record the inquiry.</p>
+          <Hint className="text-xs text-muted">Say the line. Do not record the inquiry.</Hint>
         </div>
       )}
       {extras.map((item) => {
@@ -1263,9 +1283,11 @@ function TownNight({
           <div key={item.key}>
             <p className="mb-2 text-[11px] uppercase tracking-wide text-muted">{item.label}</p>
             {line === "cover" || spent ? (
-              <p className="text-xs text-muted">
-                {spent ? "Already used. Still say the line." : "Say the line. Nothing to record."}
-              </p>
+              spent ? (
+                <p className="text-xs text-muted">Already used.</p>
+              ) : (
+                <Hint className="text-xs text-muted">Say the line. Nothing to record.</Hint>
+              )
             ) : blockedRole === item.key && blockedWho ? (
               <CannotActNote who={blockedWho} />
             ) : (
@@ -1315,7 +1337,8 @@ function FaceChange({
   if (used) {
     return (
       <div className="space-y-3">
-        <p className="text-sm text-gold">Face-off used. Cancel only tonight if this swap was a mistake.</p>
+        <p className="text-sm text-gold">Face-off used.</p>
+        <Hint className="text-xs text-muted">Cancel only tonight if this swap was a mistake.</Hint>
         <p className="text-sm">{used.messageEn}</p>
         <Button variant="ghost" onClick={() => resetFaceChangeAction(gameId)}>
           Cancel Face-off
@@ -1325,7 +1348,9 @@ function FaceChange({
   }
   return (
     <div className="space-y-4">
-      <p className="text-xs text-gold">Pick exactly one from each list, then swap. Cancel tonight if this was a mistake.</p>
+      <Hint className="text-xs text-gold">
+        Pick exactly one from each list, then swap. Cancel tonight if this was a mistake.
+      </Hint>
       <PickList
         label="Outside — pick one (eliminated)"
         players={dead}

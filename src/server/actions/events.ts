@@ -296,6 +296,8 @@ export async function createEventAction(formData: FormData) {
     slug = `${slugBase}-${++n}`;
   }
 
+  const showHints = formData.get("showHints") === "on";
+
   const event = await prisma.event.create({
     data: {
       slug,
@@ -306,12 +308,23 @@ export async function createEventAction(formData: FormData) {
       date: new Date(dateRaw),
       createdById: admin.id,
       status: "registration_open",
+      showHints,
     },
   });
   revalidatePath("/dashboard");
   revalidatePath("/admin");
   revalidatePath("/admin/events");
   return { slug: event.slug };
+}
+
+export async function setEventShowHintsAction(eventId: string, showHints: boolean) {
+  await requireAdmin();
+  const event = await prisma.event.update({ where: { id: eventId }, data: { showHints } });
+  revalidatePath("/admin");
+  revalidatePath("/admin/events");
+  revalidatePath(`/events/${event.slug}`);
+  revalidatePath("/dashboard");
+  return { ok: true as const, showHints: event.showHints };
 }
 
 export async function deleteEventAction(eventId: string) {

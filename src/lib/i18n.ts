@@ -23,6 +23,13 @@ export const dictionary = {
   dashboard: { fa: "داشبورد", en: "Dashboard" },
   upcoming: { fa: "رویدادهای پیش رو", en: "Upcoming Events" },
   createNewEvent: { fa: "ساخت رویداد جدید", en: "Create a New Event" },
+  showHints: { fa: "نمایش راهنمای راوی", en: "Show narrator hints" },
+  showHintsSub: {
+    fa: "متن‌های راهنما و یادآوری در صفحه راوی نشان داده شود",
+    en: "Show the script/reminder text on the narrator screen",
+  },
+  hintsOn: { fa: "راهنما فعال", en: "Hints on" },
+  hintsOff: { fa: "راهنما خاموش", en: "Hints off" },
   noUpcomingEvents: { fa: "رویداد پیش‌رویی نیست", en: "No upcoming events" },
   youAreNarrator: { fa: "شما راوی این بازی هستید", en: "You are the narrator" },
   openEvent: { fa: "باز کردن رویداد", en: "Open Event" },
