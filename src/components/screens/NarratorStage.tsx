@@ -9,6 +9,9 @@ import { TimerBar } from "@/components/TimerBar";
 import { ExitCardShow, LotteryShow } from "@/components/HoldFlipCard";
 import {
   dayTasks,
+  gunnerActiveHolders,
+  gunnerAmmo,
+  gunnerBulletType,
   jackCurseRound,
   lastNightReport,
   lecterSelfSaved,
@@ -30,6 +33,7 @@ import {
   tonightPicks,
   tonightTarget,
   townLikeOrder,
+  type GunnerBullet,
   type Stage,
   type StageTask,
   type NightLine,
@@ -41,6 +45,7 @@ import {
   eliminatePlayerAction,
   endGameAction,
   resetGameAction,
+  recordGunnerShotAction,
   recordJackCurseAction,
   recordLeonShotAction,
   clearTonightAction,
@@ -116,9 +121,10 @@ export function NarratorStage({ game }: { game: Game }) {
   const mayorCoupon = game.actions.find(
     (action) => action.actionType === "mayorVeto" || action.actionType === "mayorCoupon",
   );
+  const hasActiveGunHolder = gunnerActiveHolders(game.actions).size > 0;
   const tasks =
     stage.kind === "day"
-      ? dayTasks(stage, scriptRoles, mayorCoupon?.dayNumber ?? null, livingRoles)
+      ? dayTasks(stage, scriptRoles, mayorCoupon?.dayNumber ?? null, livingRoles, hasActiveGunHolder)
       : nightTasks(
           stage,
           dead.length > 0,
@@ -218,6 +224,7 @@ export function NarratorStage({ game }: { game: Game }) {
                 onLottery={() => setLotteryOpen(true)}
                 onExitCard={setExitCard}
                 onRemove={(playerId, reason) => overrideSeat(playerId, true, reason)}
+                onJackOut={setJackOut}
                 lineFor={lineFor}
               />
             ) : null}
@@ -347,6 +354,7 @@ function TaskBody({
   onLottery,
   onExitCard,
   onRemove,
+  onJackOut,
   lineFor,
 }: {
   task: StageTask;
@@ -360,6 +368,7 @@ function TaskBody({
   onLottery: () => void;
   onExitCard: (card: SnapshotExitCard) => void;
   onRemove: (playerId: string, reason: string) => void;
+  onJackOut: (value: { jackName: string; cursedName: string } | null) => void;
   lineFor: (roleKey: string) => NightLine;
 }) {
   const introNight = stage.kind === "night" && stage.n === 0;
@@ -405,6 +414,10 @@ function TaskBody({
       ) : null}
 
       {task.key === "nightEnd" ? <NightPreview game={game} name={name} byId={byId} /> : null}
+
+      {task.key === "dayShot" ? (
+        <DayShot game={game} living={living} name={name} onJackOut={onJackOut} />
+      ) : null}
 
       {task.key === "inquiry" ? (
         <InquiryReport
@@ -577,9 +590,15 @@ function NightPreview({
 }) {
   const preview = resolveNight(game.actions, game.players, game.currentDay);
   const picks = tonightPicks(game.actions, game.currentDay);
+  const gunnerTonight = tonightAction(game.actions, game.currentDay, "gunner");
   const recorded = NIGHT_PICK_LABELS.flatMap((item) => {
     const id = picks.get(item.key);
-    return id ? [{ ...item, player: byId.get(id) }] : [];
+    if (!id) return [];
+    const label =
+      item.key === "gunner" && gunnerTonight
+        ? `${item.label} (${gunnerBulletType(gunnerTonight) ?? "fake"})`
+        : item.label;
+    return [{ ...item, label, player: byId.get(id) }];
   });
 
   return (
@@ -1150,7 +1169,6 @@ function TownNight({
   );
   const extras = [
     { key: "constantine", label: "Constantine — spirit", cancel: null, players: dead, once: true },
-    { key: "gunner", label: "Gunner — give gun", cancel: null, players: living, once: false },
   ] as const;
   const kane = living.find((player) => player.roleKey === "kane");
   const kaneUsed = game.actions.some(
@@ -1271,6 +1289,18 @@ function TownNight({
           <Hint className="text-xs text-muted">Say the line. Do not record the inquiry.</Hint>
         </div>
       )}
+      {lineFor("gunner") === "skip" ? null : (
+        <div>
+          <p className="mb-2 text-[11px] uppercase tracking-wide text-muted">Gunner — give gun</p>
+          <GunnerNight
+            game={game}
+            living={living}
+            name={name}
+            line={lineFor("gunner")}
+            blockedWho={blockedRole === "gunner" ? blockedWho : null}
+          />
+        </div>
+      )}
       {extras.map((item) => {
         const line = lineFor(item.key);
         const usedBefore = game.actions.some(
@@ -1315,6 +1345,170 @@ function TownNight({
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function GunnerNight({
+  game,
+  living,
+  name,
+  line,
+  blockedWho,
+}: {
+  game: Game;
+  living: Player[];
+  name: (player?: Player) => string;
+  line: NightLine;
+  blockedWho: string | null;
+}) {
+  const [bulletPick, setBulletPick] = useState<GunnerBullet | null>(null);
+  const gunner = living.find((player) => player.roleKey === "gunner");
+  const ammo = gunnerAmmo(game.actions);
+  const tonight = tonightAction(game.actions, game.currentDay, "gunner");
+  const bulletTonight = tonight ? gunnerBulletType(tonight) : null;
+  const targetTonight = tonight?.targetPlayerId ?? null;
+
+  if (line === "cover" || !gunner) {
+    return <Hint className="text-xs text-muted">Say the line. Nothing to record.</Hint>;
+  }
+  if (blockedWho) return <CannotActNote who={blockedWho} />;
+  if (ammo.fakeLeft === 0 && ammo.realLeft === 0) {
+    return <p className="text-xs text-muted">Out of ammunition. Still say the line.</p>;
+  }
+
+  const bullet: GunnerBullet =
+    bulletPick ?? bulletTonight ?? (ammo.fakeLeft > 0 ? "fake" : "real");
+  const targets = bullet === "real" ? living.filter((player) => player.id !== gunner.id) : living;
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs text-muted">
+        Fake ×{ammo.fakeLeft} left · Real ×{ammo.realLeft} left
+      </p>
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          disabled={ammo.fakeLeft === 0}
+          onClick={() => setBulletPick("fake")}
+          className={`min-h-10 rounded-2xl border px-2 text-xs font-semibold disabled:opacity-40 ${
+            bullet === "fake" ? "border-gold bg-gold/10 text-gold" : "border-line bg-bg-elev"
+          }`}
+        >
+          Fake round
+        </button>
+        <button
+          type="button"
+          disabled={ammo.realLeft === 0}
+          onClick={() => setBulletPick("real")}
+          className={`min-h-10 rounded-2xl border px-2 text-xs font-semibold disabled:opacity-40 ${
+            bullet === "real" ? "border-gold bg-gold/10 text-gold" : "border-line bg-bg-elev"
+          }`}
+        >
+          Real round
+        </button>
+      </div>
+      <PickList
+        label="Give gun to — tap the name again to cancel"
+        players={targets}
+        name={name}
+        selectedId={bullet === bulletTonight ? targetTonight : null}
+        onPick={(player) => {
+          if (targetTonight === player.id && bulletTonight === bullet) {
+            void clearTonightAction(game.id, "gunner");
+            return;
+          }
+          void recordStageAction(
+            game.id,
+            "gunner",
+            `Gunner gave a ${bullet} round → ${name(player)}`,
+            player.id,
+            JSON.stringify({ bulletType: bullet }),
+          );
+        }}
+      />
+    </div>
+  );
+}
+
+function DayShot({
+  game,
+  living,
+  name,
+  onJackOut,
+}: {
+  game: Game;
+  living: Player[];
+  name: (player?: Player) => string;
+  onJackOut: (value: { jackName: string; cursedName: string } | null) => void;
+}) {
+  const byId = new Map(game.players.map((player) => [player.id, player]));
+  const holders = [...gunnerActiveHolders(game.actions).entries()]
+    .map(([playerId, gift]) => ({ player: byId.get(playerId), ...gift }))
+    .filter((row): row is { player: Player; bulletType: GunnerBullet; day: number } =>
+      Boolean(row.player?.alive),
+    );
+
+  if (holders.length === 0) {
+    return <p className="text-xs text-muted">Nobody is holding a gun today.</p>;
+  }
+
+  return (
+    <div className="space-y-3">
+      {holders.map((row) => (
+        <GunHolder
+          key={row.player.id}
+          holder={row.player}
+          game={game}
+          living={living}
+          name={name}
+          onJackOut={onJackOut}
+        />
+      ))}
+    </div>
+  );
+}
+
+function GunHolder({
+  holder,
+  game,
+  living,
+  name,
+  onJackOut,
+}: {
+  holder: Player;
+  game: Game;
+  living: Player[];
+  name: (player?: Player) => string;
+  onJackOut: (value: { jackName: string; cursedName: string } | null) => void;
+}) {
+  const [firing, setFiring] = useState(false);
+  return (
+    <div className="space-y-2 rounded-2xl border border-gold/40 bg-gold/10 px-4 py-3">
+      <p className="text-sm font-semibold">{name(holder)} is holding the gun.</p>
+      {firing ? (
+        <>
+          <PickList
+            label="Fire at — tap to shoot"
+            players={living.filter((player) => player.id !== holder.id)}
+            name={name}
+            onPick={(player) => {
+              setFiring(false);
+              void (async () => {
+                const result = await recordGunnerShotAction(game.id, holder.id, player.id);
+                if (result && "jackOut" in result && result.jackOut) onJackOut(result.jackOut);
+              })();
+            }}
+          />
+          <Button variant="ghost" className="mt-2" onClick={() => setFiring(false)}>
+            Cancel
+          </Button>
+        </>
+      ) : (
+        <Button variant="ghost" onClick={() => setFiring(true)}>
+          Fire
+        </Button>
+      )}
     </div>
   );
 }

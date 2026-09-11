@@ -213,6 +213,7 @@ export function dayTasks(
   scriptRoles: string[],
   mayorCouponDay: number | null = null,
   livingRoles: Set<string> | null = null,
+  hasActiveGunHolder = false,
 ) {
   const set = new Set(scriptRoles);
   const living = (key: string) => !livingRoles || livingRoles.has(key);
@@ -224,7 +225,9 @@ export function dayTasks(
       if (mayorCouponDay == null) return true;
       return mayorCouponDay === stage.n;
     }
-    if (task.key === "dayShot") return stage.n >= 1 && set.has("gunner") && living("gunner");
+    if (task.key === "dayShot") {
+      return stage.n >= 1 && set.has("gunner") && (living("gunner") || hasActiveGunHolder);
+    }
     if (task.key === "removePlayers") return stage.n >= 1;
     return stage.n >= 1;
   });
@@ -329,6 +332,63 @@ export function jackCurseRound(
   }
 
   return { ...history, eligibleIds: eligible, round, newRound: awaitingNewRound };
+}
+
+export const GUNNER_FAKE_MAX = 2;
+export const GUNNER_REAL_MAX = 1;
+
+export type GunnerBullet = "fake" | "real";
+
+export function gunnerBulletType(action: { metadata?: string | null }): GunnerBullet | null {
+  if (!action.metadata) return null;
+  try {
+    const meta = JSON.parse(action.metadata) as { bulletType?: string };
+    if (meta.bulletType === "real") return "real";
+    if (meta.bulletType === "fake") return "fake";
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+/** Ammo already handed out by the Gunner (each "gunner" gift action consumes one round). */
+export function gunnerAmmo(actions: { actionType: string; metadata?: string | null }[]) {
+  const gifts = actions.filter((action) => action.actionType === "gunner");
+  const realUsed = gifts.filter((action) => gunnerBulletType(action) === "real").length;
+  const fakeUsed = gifts.length - realUsed;
+  return {
+    fakeUsed,
+    realUsed,
+    fakeLeft: Math.max(0, GUNNER_FAKE_MAX - fakeUsed),
+    realLeft: Math.max(0, GUNNER_REAL_MAX - realUsed),
+  };
+}
+
+/** Living players currently holding a gun the Gunner gave them that they have not fired yet. */
+export function gunnerActiveHolders(
+  actions: {
+    actionType: string;
+    dayNumber: number;
+    targetPlayerId?: string | null;
+    metadata?: string | null;
+  }[],
+) {
+  const holders = new Map<string, { bulletType: GunnerBullet; day: number }>();
+  for (const action of actions) {
+    if (action.actionType === "gunner" && action.targetPlayerId) {
+      holders.set(action.targetPlayerId, { bulletType: gunnerBulletType(action) ?? "fake", day: action.dayNumber });
+      continue;
+    }
+    if (action.actionType === "gunnerShot") {
+      try {
+        const meta = JSON.parse(action.metadata || "{}") as { holderId?: string };
+        if (meta.holderId) holders.delete(meta.holderId);
+      } catch {
+        // ignore
+      }
+    }
+  }
+  return holders;
 }
 
 const NIGHT_PHASES = new Set(["night", "intro_night", "night_resolution"]);

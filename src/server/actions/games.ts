@@ -16,6 +16,8 @@ import { nightStepLabel } from "@/lib/catalog";
 import { getGameForNarrator, isNarrator, readSnapshot, snapshotFromScenario } from "@/lib/queries";
 import {
   activeJackCurse,
+  gunnerActiveHolders,
+  gunnerAmmo,
   jackCurseRound,
   lecterSelfSaved,
   livingHolds,
@@ -348,6 +350,20 @@ export async function recordStageAction(
     const nights = new Set(otherNights("leon").map((action) => action.dayNumber));
     if (nights.size >= 2) return { error: "spent" };
   }
+  if (actionType === "gunner") {
+    let bulletType: "fake" | "real" = "fake";
+    try {
+      const meta = JSON.parse(metadata || "{}") as { bulletType?: string };
+      if (meta.bulletType === "real") bulletType = "real";
+    } catch {
+      // ignore, default to fake
+    }
+    const gunner = game.players.find((player) => player.roleKey === "gunner");
+    if (bulletType === "real" && gunner && targetPlayerId === gunner.id) return { error: "self_real" };
+    const ammo = gunnerAmmo(otherNights("gunner"));
+    if (bulletType === "fake" && ammo.fakeLeft <= 0) return { error: "out_of_ammo" };
+    if (bulletType === "real" && ammo.realLeft <= 0) return { error: "out_of_ammo" };
+  }
 
   const main = ["mafiaShot", "sixthSense", "saul"];
   const replaceTypes = main.includes(actionType)
@@ -609,6 +625,48 @@ export async function recordLeonShotAction(gameId: string, targetPlayerId: strin
   if (!leon || !target) return { error: "not_found" };
   const targetName = target.user.displayNameEn || target.user.displayName;
   return recordStageAction(gameId, "leon", `Leon shot → ${targetName}`, target.id);
+}
+
+export async function recordGunnerShotAction(gameId: string, holderId: string, targetPlayerId: string) {
+  const { user, game } = await narratorGame(gameId);
+  const holders = gunnerActiveHolders(game.actions);
+  const gift = holders.get(holderId);
+  if (!gift) return { error: "no_gun" };
+  const holder = game.players.find((player) => player.id === holderId && player.alive);
+  const target = game.players.find((player) => player.id === targetPlayerId && player.alive);
+  if (!holder || !target) return { error: "not_found" };
+  if (holder.id === target.id) return { error: "self" };
+
+  const bulletType = gift.bulletType;
+  const holderNameFa = holder.user.displayName;
+  const targetNameFa = target.user.displayName;
+  const holderNameEn = holder.user.displayNameEn || holder.user.displayName;
+  const targetNameEn = target.user.displayNameEn || target.user.displayName;
+
+  await log(
+    gameId,
+    game.currentDay,
+    game.currentPhase,
+    user.id,
+    "gunnerShot",
+    bulletType === "real"
+      ? `${holderNameFa} با گلوله واقعی به ${targetNameFa} شلیک کرد`
+      : `${holderNameFa} با گلوله مشقی به ${targetNameFa} شلیک کرد — هیچ اتفاقی نیفتاد`,
+    bulletType === "real"
+      ? `${holderNameEn} fired a real round at ${targetNameEn}.`
+      : `${holderNameEn} fired a blank round at ${targetNameEn}. Nothing happens.`,
+    targetPlayerId,
+    JSON.stringify({ holderId, bulletType }),
+  );
+
+  if (bulletType === "real") {
+    const result = await eliminatePlayerAction(gameId, targetPlayerId, "gunner_shot");
+    revalidateGame(gameId, game.event.slug);
+    if (result && "jackOut" in result && result.jackOut) return { bulletType, jackOut: result.jackOut };
+    return { bulletType };
+  }
+  revalidateGame(gameId, game.event.slug);
+  return { bulletType };
 }
 
 export async function clearTonightAction(gameId: string, actionType: string) {
