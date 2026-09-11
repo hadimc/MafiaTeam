@@ -6,7 +6,7 @@ import { useLang, enName } from "@/lib/lang";
 import { Button, FactionPill, Panel, SeatAvatar, fieldClass } from "@/components/ui";
 import { RoleSteppers } from "@/components/RoleSteppers";
 import { RoleReveal } from "@/components/screens/RoleReveal";
-import { Roster, RosterPeek } from "@/components/screens/Roster";
+import { Roster, RosterPeek, AddPlayerForm, type ClubMember } from "@/components/screens/Roster";
 import { ShareJoinLink } from "@/components/CopyLink";
 import type { SessionUser } from "@/lib/auth";
 import { DEALABLE_ROLES, maxQuantity, playerCount } from "@/lib/catalog";
@@ -16,6 +16,7 @@ import {
   finalizeScenarioAction,
   joinEventAction,
   leaveEventAction,
+  removePlayerFromEventAction,
   reopenScenarioAction,
   selectScenarioAction,
   switchSeatAction,
@@ -106,10 +107,12 @@ export function EventView({
   user,
   event,
   scenarios,
+  members = [],
 }: {
   user: SessionUser;
   event: EventPayload;
   scenarios: ScenarioOption[];
+  members?: ClubMember[];
 }) {
   const { t } = useLang();
   const router = useRouter();
@@ -357,7 +360,7 @@ export function EventView({
         )
       ) : null}
 
-      {!past && amNarrator ? (
+      {!past && (amNarrator || user.isAdmin) ? (
         <>
           <Roster
             title={`${t("narrators")} · ${narrators.length}/${MAX_NARRATORS}`}
@@ -367,6 +370,11 @@ export function EventView({
             seat="narrator"
             canSwitch={rosterOpen && registered}
             onSwitch={switchSeat}
+            onRemove={
+              user.isAdmin && rosterOpen
+                ? (userId) => void removePlayerFromEventAction(event.id, userId)
+                : undefined
+            }
           />
           <Roster
             title={`${t("players")} · ${players.length}`}
@@ -376,7 +384,19 @@ export function EventView({
             seat="player"
             canSwitch={rosterOpen && registered}
             onSwitch={switchSeat}
+            onRemove={
+              user.isAdmin && rosterOpen
+                ? (userId) => void removePlayerFromEventAction(event.id, userId)
+                : undefined
+            }
           />
+          {user.isAdmin && rosterOpen ? (
+            <AddPlayerForm
+              eventId={event.id}
+              members={members}
+              registeredIds={event.registrations.map((row) => row.userId)}
+            />
+          ) : null}
         </>
       ) : !past ? (
         <RosterPeek

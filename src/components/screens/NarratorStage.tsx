@@ -16,6 +16,7 @@ import {
   lastNightReport,
   lecterSelfSaved,
   mafiaLikeOrder,
+  mafiaLostAMember,
   mafiaMainTonight,
   nightLine,
   nightTasks,
@@ -56,6 +57,7 @@ import {
   startGameAction,
   swapRolesAction,
   resetFaceChangeAction,
+  undoLastInquiryAction,
 } from "@/server/actions/games";
 
 type Person = { displayName: string; displayNameEn: string };
@@ -382,6 +384,9 @@ function TaskBody({
   );
   const curses = jackCurseRound(game.actions, living, game.currentDay);
   const byId = new Map(game.players.map((player) => [player.id, player]));
+  const matadorBlocked = game.players.find(
+    (player) => player.id === tonightTarget(game.actions, game.currentDay, "matador"),
+  );
   const night = lastNightReport(game.actions, game.currentDay, game.players);
   const inquiriesUsed = game.actions.filter((action) => action.actionType === "inquiry").length;
   const mafiaLikes = mafiaLikeOrder(living);
@@ -393,13 +398,24 @@ function TaskBody({
   const townSummary = introNight
     ? "Intro night only. Thumbs-up in this order when you name the role. No abilities tonight."
     : task.summaryEn;
+  const zodiacSummary = introNight
+    ? "Intro night only. Call the Zodiac. They show thumbs-up. No shot tonight."
+    : task.summaryEn;
 
   return (
     <Panel className="mt-2 space-y-3">
       <Hint className="text-sm">
-        {task.key === "mafia" ? mafiaSummary : task.key === "town" ? townSummary : task.summaryEn}
+        {task.key === "mafia"
+          ? mafiaSummary
+          : task.key === "town"
+            ? townSummary
+            : task.key === "zodiac"
+              ? zodiacSummary
+              : task.summaryEn}
       </Hint>
-      {introNight && (task.key === "mafia" || task.key === "town") ? null : <Hint>{task.notesEn}</Hint>}
+      {introNight && (task.key === "mafia" || task.key === "town" || task.key === "zodiac") ? null : (
+        <Hint>{task.notesEn}</Hint>
+      )}
 
       {task.key === "speak" || task.key === "defense" ? (
         <Hint className="text-xs text-gold">Use the 1 min / 30 sec timers at the bottom.</Hint>
@@ -458,7 +474,9 @@ function TaskBody({
       {task.key === "jack" ? (
         <>
           <AbilityHeader label="Jack" holder={living.find((player) => player.roleKey === "jack")} name={name} />
-          {lineFor("jack") === "record" && !jackShown ? (
+          {matadorBlocked?.roleKey === "jack" ? (
+            <CannotActNote who={`${name(matadorBlocked)} (${matadorBlocked.roleNameEn})`} />
+          ) : lineFor("jack") === "record" && !jackShown ? (
             <JackCurse
               gameId={game.id}
               living={living}
@@ -476,7 +494,7 @@ function TaskBody({
       ) : null}
 
       {task.key === "zodiac" ? (
-        <ZodiacShot game={game} living={living} name={name} />
+        <ZodiacShot game={game} living={living} name={name} introNight={introNight} />
       ) : null}
 
       {task.key === "mafia" && introNight ? <LikeOrder label="Like order" players={mafiaLikes} name={name} /> : null}
@@ -763,6 +781,11 @@ function InquiryReport({
       >
         Inquiry asked
       </Button>
+      {used > 0 ? (
+        <Button variant="ghost" onClick={() => undoLastInquiryAction(gameId)}>
+          Remove last inquiry
+        </Button>
+      ) : null}
     </div>
   );
 }
@@ -831,10 +854,12 @@ function ZodiacShot({
   game,
   living,
   name,
+  introNight,
 }: {
   game: Game;
   living: Player[];
   name: (player?: Player) => string;
+  introNight: boolean;
 }) {
   const line = nightLine(
     "zodiac",
@@ -844,12 +869,23 @@ function ZodiacShot({
   );
   const zodiac = living.find((player) => player.roleKey === "zodiac");
   const target = tonightTarget(game.actions, game.currentDay, "zodiac");
+  const blocked = game.players.find(
+    (player) => player.id === tonightTarget(game.actions, game.currentDay, "matador"),
+  );
   const preview = resolveNight(game.actions, game.players, game.currentDay);
   const notes = preview.notes.filter((note) => /zodiac/i.test(note));
   return (
     <>
       <AbilityHeader label="Zodiac" holder={zodiac} name={name} />
-      {line === "record" && zodiac ? (
+      {introNight ? (
+        line === "record" && zodiac ? (
+          <LikeOrder label="Thumbs-up" players={[zodiac]} name={name} />
+        ) : (
+          <Hint className="text-xs text-muted">Say the line. Nothing to record.</Hint>
+        )
+      ) : blocked?.roleKey === "zodiac" ? (
+        <CannotActNote who={`${name(blocked)} (${blocked.roleNameEn})`} />
+      ) : line === "record" && zodiac ? (
         <>
           <PickList
             label="Shoot — tap the name again to cancel"
@@ -1103,9 +1139,11 @@ function MafiaNight({
     (player) => player.id === tonightTarget(game.actions, game.currentDay, "matador"),
   );
   const blockedRole = blocked?.roleKey;
+  const saulIn = living.some((player) => player.roleKey === "saul");
+  const lostMafia = mafiaLostAMember(game.players);
   const canShot = living.some((player) => player.faction === "mafia") && blockedRole !== "godfather";
   const canSixth = living.some((player) => player.roleKey === "godfather") && blockedRole !== "godfather";
-  const canBuy = living.some((player) => player.roleKey === "saul") && !saulUsed && blockedRole !== "saul";
+  const canBuy = saulIn && lostMafia && !saulUsed && blockedRole !== "saul";
   const lecter = living.find((player) => player.roleKey === "lecter");
   const matador = living.find((player) => player.roleKey === "matador");
   const lecterSelfUsed = Boolean(
@@ -1143,6 +1181,9 @@ function MafiaNight({
         {blockedRole === "godfather" && blocked ? (
           <CannotActNote who={`${name(blocked)} (${blocked.roleNameEn})`} />
         ) : null}
+        {saulIn && !lostMafia && !saulUsed ? (
+          <p className="mt-2 text-xs text-muted">Purchase unlocks after Mafia has lost a member.</p>
+        ) : null}
         {options.length === 0 && blockedRole !== "godfather" ? (
           <>
             <p className="text-xs text-muted">Mafia is out.</p>
@@ -1172,7 +1213,11 @@ function MafiaNight({
                       ? "Guess — then Cancel, Wrong, or Correct"
                       : "Target — tap again to change"
                   }
-                  players={living}
+                  players={
+                    selectedMain === "saul"
+                      ? living.filter((player) => player.faction !== "mafia")
+                      : living
+                  }
                   name={name}
                   selectedId={tonightTarget(game.actions, game.currentDay, selectedMain)}
                   onPick={(player) => {
@@ -1262,7 +1307,7 @@ function MafiaNight({
       <NightAbility title="Matador disability" line={lineFor("matador")} holder={matador} name={name}>
         <PickList
           label="Block — tap again to change"
-          players={living.filter((player) => player.faction === "citizen")}
+          players={living.filter((player) => player.faction !== "mafia")}
           name={name}
           selectedId={blocked?.id}
           markedId={blocked?.id}

@@ -114,7 +114,7 @@ const NIGHT_TASKS: StageTask[] = [
     key: "zodiac",
     nameEn: "Zodiac",
     nameFa: "عملیات زودیاک",
-    summaryEn: "Even nights only: wake the Zodiac to shoot one player from either side.",
+    summaryEn: "Intro night: thumbs-up only. Even nights: shoot one player from either side.",
     notesEn: "Skip on odd nights — the Zodiac is not woken. Night-immune to the Mafia shot and Leon's shot. Shooting Watson kills the Zodiac instead. Only a day vote or the Gunner's real round removes the Zodiac.",
   },
   {
@@ -122,7 +122,7 @@ const NIGHT_TASKS: StageTask[] = [
     nameEn: "Mafia",
     nameFa: "عملیات مافیا",
     summaryEn: "Say the lines for Mafia roles that are in this scenario. Main action is one of: shot, sixth sense, or purchase. Then Lecter save and Matador block if those roles exist.",
-    notesEn: "Night 1+. Skip roles that were never in this scenario. If a dealt role is out but not publicly known, still say the wake line. Do not record an ability after its holder has left: no sixth sense without Godfather, no purchase without Saul, no Lecter save, no Matador block. Lecter may self-save once. Tap again to correct a target. Nobody leaves until the night ends.",
+    notesEn: "Night 1+. Skip roles that were never in this scenario. If a dealt role is out but not publicly known, still say the wake line. Do not record an ability after its holder has left: no sixth sense without Godfather, no purchase without Saul, no Lecter save, no Matador block. Purchase is available only after Mafia has already lost a member. Lecter may self-save once. Tap again to correct a target. Nobody leaves until the night ends.",
   },
   {
     key: "town",
@@ -256,7 +256,11 @@ export function nightTasks(
     }
     if (task.key === "nostradamus") return stage.n === 0 && line("nostradamus") !== "skip";
     if (task.key === "jack") return line("jack") !== "skip";
-    if (task.key === "zodiac") return stage.n >= 2 && stage.n % 2 === 0 && line("zodiac") !== "skip";
+    if (task.key === "zodiac") {
+      if (line("zodiac") === "skip") return false;
+      if (stage.n === 0) return true;
+      return stage.n >= 2 && stage.n % 2 === 0;
+    }
     if (task.key === "mafia") return anyMafia;
     if (task.key === "town") return anyTown;
     if (task.key === "nightEnd") return stage.n >= 1;
@@ -451,6 +455,10 @@ export function livingHolds(
   return players.some((player) => player.roleKey === roleKey && player.alive !== false);
 }
 
+export function mafiaLostAMember(players: { faction: string; alive?: boolean }[]) {
+  return players.some((player) => player.faction === "mafia" && player.alive === false);
+}
+
 function dropDeadRolePicks(picks: Map<string, string>, players: NightPlayer[]) {
   const dropped: string[] = [];
   for (const actionType of [...picks.keys()]) {
@@ -570,6 +578,9 @@ export function resolveNight(
   if (blockedRole === "godfather" && (mafiaShotPick || sixthPick)) {
     notes.push("Matador blocked the Godfather. The mafia main action does not apply.");
   }
+  if (blockedRole === "zodiac" && picks.get("zodiac")) {
+    notes.push("Matador blocked Zodiac. That shot does not apply.");
+  }
   if (blockedId && notes.every((note) => !/matador blocked/i.test(note))) {
     notes.push("Matador disabled that player. They cannot act tonight.");
   }
@@ -608,9 +619,21 @@ export function resolveNight(
   let saulConvertId: string | null = null;
   if (saulTargetId) {
     const target = byId.get(saulTargetId);
-    if (target?.roleKey === "villager") {
+    const alreadyBought = Boolean(
+      target &&
+        actions.some(
+          (action) =>
+            action.actionType === "saulConvert" &&
+            action.dayNumber === nightNumber &&
+            action.targetPlayerId === target.id,
+        ),
+    );
+    if (!mafiaLostAMember(players)) {
+      notes.push("Saul’s purchase is not available until Mafia has lost a member.");
+    } else if (target && (target.roleKey === "villager" || alreadyBought)) {
       saulConvertId = target.id;
-      notes.push("Saul’s purchase succeeded. That player joins the Mafia from tonight on.");
+      byId.set(target.id, { ...target, roleKey: "mafioso", faction: "mafia" });
+      notes.push("Saul’s purchase succeeded. That player is Simple Mafia from tonight on.");
     } else if (target) {
       notes.push("Saul’s purchase failed. That player already has a role.");
     }

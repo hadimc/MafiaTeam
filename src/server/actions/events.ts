@@ -62,6 +62,37 @@ export async function joinEventAction(eventId: string) {
   return { ok: true as const };
 }
 
+export async function addPlayerToEventAction(eventId: string, userId: string) {
+  await requireAdmin();
+  const event = await eventWithNarrators(eventId);
+  if (!event) return { error: "not_found" };
+  if (!rosterUnlocked(event)) return { error: "closed" };
+
+  const member = await prisma.user.findUnique({ where: { id: userId } });
+  if (!member || !member.enabled) return { error: "not_found" };
+
+  const existing = await prisma.eventRegistration.findUnique({
+    where: { eventId_userId: { eventId, userId } },
+  });
+  if (!existing) {
+    await prisma.eventRegistration.create({ data: { eventId, userId } });
+  }
+  touchEvent(event.slug);
+  return { ok: true as const };
+}
+
+export async function removePlayerFromEventAction(eventId: string, userId: string) {
+  await requireAdmin();
+  const event = await eventWithNarrators(eventId);
+  if (!event) return { error: "not_found" };
+  if (!rosterUnlocked(event)) return { error: "closed" };
+
+  await prisma.eventNarrator.deleteMany({ where: { eventId, userId } });
+  await prisma.eventRegistration.deleteMany({ where: { eventId, userId } });
+  touchEvent(event.slug);
+  return { ok: true as const };
+}
+
 export async function leaveEventAction(eventId: string) {
   const user = await requireUser();
   const event = await eventWithNarrators(eventId);

@@ -106,6 +106,16 @@ test("Matador blocking Watson ignores that save", () => {
   assert.equal(result.notes.some((note) => /matador blocked watson/i.test(note)), true);
 });
 
+test("Matador can disable an independent night action", () => {
+  const result = resolveNight(
+    [act("zodiac", villager.id, 2), act("matador", zodiac.id, 2)],
+    [zodiac, villager, matador],
+    2,
+  );
+  assert.deepEqual(result.leaveIds, []);
+  assert.equal(result.notes.some((note) => /matador blocked zodiac/i.test(note)), true);
+});
+
 test("empty night explains why nobody leaves", () => {
   const result = resolveNight([], [villager], 1);
   assert.deepEqual(result.leaveIds, []);
@@ -315,9 +325,10 @@ test("Zodiac shot is dropped once Zodiac is out", () => {
   assert.equal(result.notes.some((note) => /zodiac is out/i.test(note)), true);
 });
 
-test("Zodiac task only appears on even nights", () => {
+test("Zodiac task appears on intro night and even nights only", () => {
   const line = (key: string) => (key === "zodiac" ? ("record" as const) : ("skip" as const));
   const keys = (n: number) => nightTasks({ kind: "night", n }, false, line).map((task) => task.key);
+  assert.equal(keys(0).includes("zodiac"), true);
   assert.equal(keys(1).includes("zodiac"), false);
   assert.equal(keys(2).includes("zodiac"), true);
   assert.equal(keys(3).includes("zodiac"), false);
@@ -348,21 +359,28 @@ test("appliedNightOutcome reads the committed leave/return log for a night, not 
 });
 
 const saul = player("s", "saul", "mafia");
+const deadMafioso = { ...player("x", "mafioso", "mafia"), alive: false };
 
 test("Saul's purchase succeeds on a plain citizen and marks them for conversion", () => {
-  const result = resolveNight([act("saul", villager.id)], [saul, villager], 1);
+  const result = resolveNight([act("saul", villager.id)], [saul, villager, deadMafioso], 1);
   assert.equal(result.saulConvertId, villager.id);
   assert.equal(result.notes.some((note) => /purchase succeeded/i.test(note)), true);
 });
 
+test("Saul's purchase is locked until Mafia has lost a member", () => {
+  const result = resolveNight([act("saul", villager.id)], [saul, villager], 1);
+  assert.equal(result.saulConvertId, null);
+  assert.equal(result.notes.some((note) => /lost a member/i.test(note)), true);
+});
+
 test("Saul's purchase fails on a player with a role", () => {
-  const result = resolveNight([act("saul", watson.id)], [saul, watson], 1);
+  const result = resolveNight([act("saul", watson.id)], [saul, watson, deadMafioso], 1);
   assert.equal(result.saulConvertId, null);
   assert.equal(result.notes.some((note) => /purchase failed/i.test(note)), true);
 });
 
 test("Saul's purchase fails on another Mafia member (already has a role)", () => {
-  const result = resolveNight([act("saul", lecter.id)], [saul, lecter], 1);
+  const result = resolveNight([act("saul", lecter.id)], [saul, lecter, deadMafioso], 1);
   assert.equal(result.saulConvertId, null);
 });
 
@@ -371,10 +389,47 @@ test("Matador blocking the Godfather does not cancel Saul's purchase", () => {
   const matador = player("m", "matador", "mafia");
   const result = resolveNight(
     [act("saul", villager.id), act("matador", godfather.id)],
-    [saul, godfather, matador, villager],
+    [saul, godfather, matador, villager, deadMafioso],
     1,
   );
   assert.equal(result.saulConvertId, villager.id);
+});
+
+test("Leon treats a same-night purchase as Simple Mafia", () => {
+  const result = resolveNight(
+    [act("saul", villager.id), act("leon", villager.id)],
+    [saul, villager, leon, deadMafioso],
+    1,
+  );
+  assert.equal(result.saulConvertId, villager.id);
+  assert.deepEqual(result.leaveIds, [villager.id]);
+  assert.equal(result.notes.some((note) => /leon.?s shot stands/i.test(note)), true);
+});
+
+test("Kane treats a same-night purchase as Mafia", () => {
+  const kane = player("k", "kane", "citizen");
+  const result = resolveNight(
+    [act("saul", villager.id), act("kane", villager.id)],
+    [saul, villager, kane, deadMafioso],
+    1,
+  );
+  assert.equal(result.saulConvertId, villager.id);
+  assert.equal(result.kaneMafiaMarkId, villager.id);
+});
+
+test("already-converted purchase still counts as Simple Mafia for Leon", () => {
+  const bought = { ...villager, roleKey: "mafioso", faction: "mafia" as const };
+  const result = resolveNight(
+    [
+      act("saul", villager.id),
+      { actionType: "saulConvert", dayNumber: 1, phase: "night", targetPlayerId: villager.id },
+      act("leon", villager.id),
+    ],
+    [saul, bought, leon, deadMafioso],
+    1,
+  );
+  assert.equal(result.saulConvertId, villager.id);
+  assert.deepEqual(result.leaveIds, [villager.id]);
 });
 
 test("night briefing still reports Kane's delayed leave after Kane is already marked dead", () => {

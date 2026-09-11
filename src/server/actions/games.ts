@@ -21,6 +21,7 @@ import {
   jackCurseRound,
   lecterSelfSaved,
   livingHolds,
+  mafiaLostAMember,
   NIGHT_ACTION_ROLE,
   NIGHT_REPLACEABLE,
   resolveNight,
@@ -201,6 +202,34 @@ function viaNight(metadata?: string | null) {
   }
 }
 
+async function restoreSaulConvert(action: { targetPlayerId?: string | null; metadata?: string | null }) {
+  if (!action.targetPlayerId) return;
+  try {
+    const meta = JSON.parse(action.metadata || "{}") as { prevRole?: RoleCard };
+    if (meta.prevRole) {
+      await prisma.gamePlayer.update({ where: { id: action.targetPlayerId }, data: meta.prevRole });
+    }
+  } catch {
+    // ignore malformed metadata; nothing to revert
+  }
+}
+
+async function reverseTonightTypes(gameId: string, dayNumber: number, types: string[]) {
+  if (!types.length) return;
+  if (types.includes("saul")) {
+    const { game } = await narratorGame(gameId);
+    for (const action of game.actions) {
+      if (action.dayNumber !== dayNumber || action.actionType !== "saulConvert" || !viaNight(action.metadata)) continue;
+      await prisma.gameAction.update({ where: { id: action.id }, data: { reversed: true } });
+      await restoreSaulConvert(action);
+    }
+  }
+  await prisma.gameAction.updateMany({
+    where: { gameId, dayNumber, actionType: { in: types }, reversed: false },
+    data: { reversed: true },
+  });
+}
+
 async function undoNightResolution(gameId: string, nightNumber: number) {
   const { game } = await narratorGame(gameId);
   const via = game.actions.filter((action) => action.dayNumber === nightNumber && viaNight(action.metadata));
@@ -219,14 +248,7 @@ async function undoNightResolution(gameId: string, nightNumber: number) {
       });
     }
     if (action.actionType === "saulConvert" && action.targetPlayerId) {
-      try {
-        const meta = JSON.parse(action.metadata || "{}") as { prevRole?: RoleCard };
-        if (meta.prevRole) {
-          await prisma.gamePlayer.update({ where: { id: action.targetPlayerId }, data: meta.prevRole });
-        }
-      } catch {
-        // ignore malformed metadata; nothing to revert
-      }
+      await restoreSaulConvert(action);
     }
   }
 }
@@ -237,6 +259,10 @@ async function applyNightResolution(gameId: string, nightNumber: number) {
   const result = resolveNight(game.actions, game.players, nightNumber);
   const meta = JSON.stringify({ via: "night" });
   let jackOut: { jackName: string; cursedName: string } | undefined;
+
+  if (result.saulConvertId) {
+    await convertToMafiaAction(gameId, result.saulConvertId, meta);
+  }
 
   for (const playerId of result.shieldBreakIds) {
     const player = game.players.find((item) => item.id === playerId);
@@ -261,10 +287,6 @@ async function applyNightResolution(gameId: string, nightNumber: number) {
 
   for (const playerId of result.returnIds) {
     await revivePlayerAction(gameId, playerId, meta);
-  }
-
-  if (result.saulConvertId) {
-    await convertToMafiaAction(gameId, result.saulConvertId, meta);
   }
 
   if (result.leaveIds.length || result.returnIds.length || result.shieldBreakIds.length || result.notes.length) {
@@ -295,6 +317,7 @@ export async function recordJackCurseAction(gameId: string, targetPlayerId: stri
     (action) => action.actionType === "shown" && action.targetPlayerId === jack.id,
   );
   if (shown) return { error: "frozen" };
+  if (tonightTarget(game.actions, game.currentDay, "matador") === jack.id) return { error: "blocked" };
 
   const round = jackCurseRound(
     game.actions,
@@ -360,16 +383,17 @@ export async function recordStageAction(
   if (actionType === "kane" && otherNights("kane").length) return { error: "used" };
   if (actionType === "constantine" && otherNights("constantine").length) return { error: "used" };
   if (actionType === "saul" && otherNights("saul").length) return { error: "used" };
+  if (actionType === "saul" && !mafiaLostAMember(game.players)) return { error: "no_mafia_loss" };
   if (actionType === "leon") {
     const nights = new Set(otherNights("leon").map((action) => action.dayNumber));
     if (nights.size >= 2) return { error: "spent" };
   }
-  if (actionType === "matador" && targetPlayerId) {
+  if ((actionType === "matador" || actionType === "saul") && targetPlayerId) {
     const target = game.players.find((player) => player.id === targetPlayerId);
-    if (target && target.faction !== "citizen") return { error: "not_citizen" };
+    if (target && target.faction === "mafia") return { error: "mafia" };
   }
   if (actionType === "zodiac" && targetPlayerId) {
-    if (game.currentDay % 2 !== 0) return { error: "not_zodiac_night" };
+    if (game.currentDay < 2 || game.currentDay % 2 !== 0) return { error: "not_zodiac_night" };
     const zodiac = game.players.find((player) => player.roleKey === "zodiac");
     if (zodiac && targetPlayerId === zodiac.id) return { error: "self" };
   }
@@ -395,15 +419,7 @@ export async function recordStageAction(
       ? [actionType]
       : [];
   if (replaceTypes.length) {
-    await prisma.gameAction.updateMany({
-      where: {
-        gameId,
-        dayNumber: game.currentDay,
-        actionType: { in: replaceTypes },
-        reversed: false,
-      },
-      data: { reversed: true },
-    });
+    await reverseTonightTypes(gameId, game.currentDay, replaceTypes);
   }
 
   if (actionType === "matador" && targetPlayerId) {
@@ -412,16 +428,9 @@ export async function recordStageAction(
       .filter(([, role]) => role === target?.roleKey)
       .map(([type]) => type);
     if (target?.roleKey === "godfather") blockedTypes.push("mafiaShot");
+    if (target?.roleKey === "jack") blockedTypes.push("jack");
     if (blockedTypes.length) {
-      await prisma.gameAction.updateMany({
-        where: {
-          gameId,
-          dayNumber: game.currentDay,
-          actionType: { in: blockedTypes },
-          reversed: false,
-        },
-        data: { reversed: true },
-      });
+      await reverseTonightTypes(gameId, game.currentDay, blockedTypes);
     }
   }
 
@@ -436,6 +445,9 @@ export async function recordStageAction(
     targetPlayerId,
     metadata,
   );
+  if (actionType === "saul" && targetPlayerId) {
+    await convertToMafiaAction(gameId, targetPlayerId, JSON.stringify({ via: "night" }));
+  }
   revalidateGame(gameId, game.event.slug);
 }
 
@@ -641,11 +653,12 @@ export async function revivePlayerAction(gameId: string, playerId: string, metad
   revalidateGame(gameId, game.event.slug);
 }
 
-/** Saul's purchase succeeded: converts a plain citizen into a Mafioso from this point on. */
+/** Saul's purchase succeeded: converts a plain citizen into Simple Mafia from this point on. */
 export async function convertToMafiaAction(gameId: string, playerId: string, metadata = "{}") {
   const { user, game } = await narratorGame(gameId);
   const player = game.players.find((item) => item.id === playerId);
   if (!player || !player.alive) return { error: "not_found" };
+  if (player.roleKey !== "villager") return { error: "not_villager" };
   const mafioso = CATALOG_BY_KEY.mafioso;
   const prevRole = roleCard(player);
   const nextRole: RoleCard = {
@@ -734,10 +747,15 @@ export async function recordGunnerShotAction(gameId: string, holderId: string, t
 export async function clearTonightAction(gameId: string, actionType: string) {
   const { game } = await narratorGame(gameId);
   if (!(NIGHT_REPLACEABLE as readonly string[]).includes(actionType)) return { error: "type" };
-  await prisma.gameAction.updateMany({
-    where: { gameId, dayNumber: game.currentDay, actionType, reversed: false },
-    data: { reversed: true },
-  });
+  await reverseTonightTypes(gameId, game.currentDay, [actionType]);
+  revalidateGame(gameId, game.event.slug);
+}
+
+export async function undoLastInquiryAction(gameId: string) {
+  const { game } = await narratorGame(gameId);
+  const last = [...game.actions].reverse().find((action) => action.actionType === "inquiry");
+  if (!last) return { error: "empty" };
+  await prisma.gameAction.update({ where: { id: last.id }, data: { reversed: true } });
   revalidateGame(gameId, game.event.slug);
 }
 
@@ -793,8 +811,20 @@ export async function recordNightAction(gameId: string, targetPlayerId: string) 
   const stepKey = order[game.nightStep] ?? "unknown";
   const role = snapshot.roles.find((r) => r.key === stepKey);
   const target = game.players.find((p) => p.id === targetPlayerId);
+  const boughtTonight = Boolean(
+    target &&
+      game.actions.some(
+        (action) =>
+          action.actionType === "saulConvert" &&
+          action.dayNumber === game.currentDay &&
+          action.targetPlayerId === target.id,
+      ),
+  );
   const detectiveSeesMafia =
-    stepKey === "detective" && target && target.faction === "mafia" && target.roleKey !== "godfather";
+    stepKey === "detective" &&
+    target &&
+    target.roleKey !== "godfather" &&
+    (target.faction === "mafia" || boughtTonight);
 
   await log(
     gameId,

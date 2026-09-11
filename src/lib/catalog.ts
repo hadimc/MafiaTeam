@@ -141,9 +141,9 @@ export const CATALOG_ROLES: CatalogRole[] = [
     faction: "mafia",
     dealable: true,
     nightOrder: 2,
-    summaryEn: "May recruit a plain citizen",
-    description: "یک‌بار می‌تواند یک شهروند ساده را به مافیا جذب کند. اگر نقش‌دار باشد جذب نمی‌شود.",
-    descriptionEn: "Once, may recruit a plain citizen. If the target has a special role, it fails. On a buy night, Mafia does not shoot.",
+    summaryEn: "May recruit a plain citizen after Mafia loses a member",
+    description: "یک‌بار، فقط بعد از از دست دادن یک مافیا، می‌تواند یک شهروند ساده را جذب کند. اگر نقش‌دار باشد جذب نمی‌شود.",
+    descriptionEn: "Once, and only after Mafia has lost a member, may recruit a plain citizen. If the target has a special role, it fails. On a buy night, Mafia does not shoot.",
   },
   {
     key: "lecter",
@@ -170,7 +170,7 @@ export const CATALOG_ROLES: CatalogRole[] = [
   {
     key: "mafioso",
     name: "مافیای ساده",
-    nameEn: "Mafioso",
+    nameEn: "Simple Mafia",
     faction: "mafia",
     dealable: true,
     nightOrder: 2,
