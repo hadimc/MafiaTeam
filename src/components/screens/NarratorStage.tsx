@@ -409,6 +409,7 @@ function TaskBody({
         <NightReport
           leave={night.leaveIds.map((id) => byId.get(id))}
           back={night.returnIds.map((id) => byId.get(id))}
+          kaneReveal={byId.get(night.kaneMafiaMarkId ?? "")}
           name={name}
         />
       ) : null}
@@ -550,17 +551,36 @@ function TaskBody({
 function NightReport({
   leave,
   back,
+  kaneReveal,
   name,
 }: {
   leave: (Player | undefined)[];
   back: (Player | undefined)[];
+  kaneReveal?: Player;
   name: (player?: Player) => string;
 }) {
   const independents = leave.filter(
     (player): player is Player => player != null && player.faction === "independent",
   );
+  const kaneAmongLeavers = leave.find(
+    (player): player is Player => player != null && player.roleKey === "kane",
+  );
   return (
     <div className="space-y-3">
+      {kaneReveal ? (
+        <div className="rounded-2xl border border-gold/40 bg-gold/10 px-4 py-3">
+          <p className="text-[11px] uppercase tracking-[0.22em] text-gold">Announce — Kane’s coupon</p>
+          <p className="mt-1 font-semibold">
+            {name(kaneReveal)} is {kaneReveal.roleNameEn}
+          </p>
+          <p dir="rtl" lang="fa" className="farsi mt-1 text-sm text-gold">
+            {kaneReveal.roleName}
+          </p>
+          <p className="mt-2 text-sm text-muted">
+            Kane sat with them last night and confirmed Mafia. Kane leaves the following night.
+          </p>
+        </div>
+      ) : null}
       <ReportNames label="Leave the game" players={leave} name={name} empty="Nobody leaves." />
       {independents.map((player) => (
         <div key={player.id} className="rounded-2xl border border-gold/40 bg-gold/10 px-4 py-3">
@@ -574,6 +594,11 @@ function NightReport({
           </p>
         </div>
       ))}
+      {kaneAmongLeavers ? (
+        <p className="text-xs text-gold">
+          {name(kaneAmongLeavers)}’s departure is Kane’s delayed mark catching up. Do not explain why.
+        </p>
+      ) : null}
       <ReportNames label="Back in the game" players={back} name={name} empty="Nobody returns." />
     </div>
   );

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { nightLine, nightTasks, resolveNight } from "./stages";
+import { appliedNightOutcome, lastNightReport, nightLine, nightTasks, resolveNight } from "./stages";
 
 type P = {
   id: string;
@@ -321,4 +321,46 @@ test("Zodiac task only appears on even nights", () => {
   assert.equal(keys(1).includes("zodiac"), false);
   assert.equal(keys(2).includes("zodiac"), true);
   assert.equal(keys(3).includes("zodiac"), false);
+});
+
+test("lastNightReport surfaces which Mafia player Kane's coupon marked", () => {
+  const kane = player("k", "kane", "citizen");
+  const result = lastNightReport([act("kane", lecter.id, 1)], 2, [kane, lecter]);
+  assert.equal(result.kaneMafiaMarkId, lecter.id);
+  assert.deepEqual(result.leaveIds, []);
+});
+
+test("appliedNightOutcome reads the committed leave/return log for a night, not a live recompute", () => {
+  // Simulate what applyNightResolution actually persists: an "eliminate" GameAction for
+  // Kane, tagged via:"night" for night 2 — recorded once, at the moment Kane was still alive.
+  const applied = appliedNightOutcome(
+    [
+      {
+        actionType: "eliminate",
+        dayNumber: 2,
+        targetPlayerId: "k",
+        metadata: JSON.stringify({ via: "night" }),
+      },
+    ],
+    2,
+  );
+  assert.deepEqual(applied.leaveIds, ["k"]);
+});
+
+test("night briefing still reports Kane's delayed leave after Kane is already marked dead", () => {
+  // Regression: recomputing resolveNight for a past night using *today's* alive status used to
+  // hide Kane's delayed leave, because the delayed-leave check requires Kane to still be alive.
+  // lastNightReport must instead read back what was actually applied for that night.
+  const deadKane = { ...player("k", "kane", "citizen"), alive: false };
+  const actions = [
+    act("kane", lecter.id, 1),
+    {
+      actionType: "eliminate",
+      dayNumber: 2,
+      targetPlayerId: "k",
+      metadata: JSON.stringify({ via: "night" }),
+    },
+  ];
+  const result = lastNightReport(actions, 3, [deadKane, lecter]);
+  assert.deepEqual(result.leaveIds, ["k"]);
 });

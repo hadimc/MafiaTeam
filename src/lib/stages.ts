@@ -505,7 +505,13 @@ export function resolveNight(
   nightNumber: number,
 ) {
   if (nightNumber < 1) {
-    return { leaveIds: [] as string[], returnIds: [] as string[], shieldBreakIds: [] as string[], notes: [] as string[] };
+    return {
+      leaveIds: [] as string[],
+      returnIds: [] as string[],
+      shieldBreakIds: [] as string[],
+      notes: [] as string[],
+      kaneMafiaMarkId: null as string | null,
+    };
   }
 
   const picks = tonightPicks(actions, nightNumber);
@@ -622,9 +628,11 @@ export function resolveNight(
 
   const kanePlayer = players.find((player) => player.roleKey === "kane");
   const kaneTargetId = ability("kane", "kane");
+  let kaneMafiaMarkId: string | null = null;
   if (kaneTargetId && kanePlayer) {
     const target = byId.get(kaneTargetId);
     if (target?.faction === "mafia") {
+      kaneMafiaMarkId = target.id;
       notes.push("Kane coupon used on Mafia. Kane leaves the following night.");
     } else if (target) {
       notes.push("Kane coupon used. Target is not Mafia. Nothing happens.");
@@ -677,7 +685,41 @@ export function resolveNight(
     returnIds,
     shieldBreakIds: [...new Set(shieldBreakIds)],
     notes,
+    kaneMafiaMarkId,
   };
+}
+
+function actionAppliedViaNight(metadata?: string | null) {
+  if (!metadata) return false;
+  try {
+    return (JSON.parse(metadata) as { via?: string }).via === "night";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * What was actually committed to the game (eliminations/revives) when a given night was
+ * resolved, read straight from the persisted action log. Unlike re-running `resolveNight`,
+ * this stays correct even after the affected players' `alive` status has since changed
+ * (e.g. Kane's delayed leave, or Jack's curse chain), because it does not depend on any
+ * "is this role-holder still alive today" guard.
+ */
+export function appliedNightOutcome(
+  actions: { actionType: string; dayNumber: number; targetPlayerId?: string | null; metadata?: string | null }[],
+  nightNumber: number,
+) {
+  const leaveIds: string[] = [];
+  const returnIds: string[] = [];
+  for (const action of actions) {
+    if (action.dayNumber !== nightNumber || !actionAppliedViaNight(action.metadata)) continue;
+    if ((action.actionType === "eliminate" || action.actionType === "jackOut") && action.targetPlayerId) {
+      leaveIds.push(action.targetPlayerId);
+    } else if (action.actionType === "revive" && action.targetPlayerId) {
+      returnIds.push(action.targetPlayerId);
+    }
+  }
+  return { leaveIds, returnIds };
 }
 
 export function lastNightReport(
@@ -686,7 +728,12 @@ export function lastNightReport(
   players: NightPlayer[],
 ) {
   const result = resolveNight(actions, players, dayNumber - 1);
-  return { leaveIds: result.leaveIds, returnIds: result.returnIds };
+  const applied = appliedNightOutcome(actions, dayNumber - 1);
+  return {
+    leaveIds: applied.leaveIds,
+    returnIds: applied.returnIds,
+    kaneMafiaMarkId: result.kaneMafiaMarkId,
+  };
 }
 
 export function hasShield(
