@@ -25,6 +25,7 @@ function slugify(input: string) {
 function touchEvent(slug: string) {
   revalidatePath(`/events/${slug}`);
   revalidatePath(`/events/${slug}/players`);
+  revalidatePath(`/events/${slug}/briefing`);
   revalidatePath("/dashboard");
 }
 
@@ -241,7 +242,9 @@ export async function finalizeScenarioAction(eventId: string, formData: FormData
   if (players !== seated) return { error: "count", expected: seated, actual: players };
 
   const attendees = event.narrators.length + seated;
+  const nameFa = `${event.title} · ${base.name}`.slice(0, 90);
   const nameEn = `${event.titleEn} · ${base.nameEn}`.slice(0, 90);
+  const uniqueNameEn = `${nameEn} · ${event.slug}`.slice(0, 90);
   const exitCards =
     base.exitCards.length > 0
       ? base.exitCards.map(({ key, name, nameEn, description, descriptionEn }) => ({
@@ -267,8 +270,8 @@ export async function finalizeScenarioAction(eventId: string, formData: FormData
       prisma.scenario.update({
         where: { id: event.scenarioId },
         data: {
-          name: nameEn,
-          nameEn: `${nameEn} · ${event.slug}`,
+          name: nameFa,
+          nameEn: uniqueNameEn,
           attendeeCount: attendees,
           narratorCount: event.narrators.length,
           supportedPlayerCount: players,
@@ -285,8 +288,8 @@ export async function finalizeScenarioAction(eventId: string, formData: FormData
   } else {
     const clone = await prisma.scenario.create({
       data: {
-        name: nameEn,
-        nameEn: `${nameEn} · ${event.slug}`,
+        name: nameFa,
+        nameEn: uniqueNameEn,
         description: base.description,
         descriptionEn: base.descriptionEn,
         attendeeCount: attendees,
@@ -306,8 +309,7 @@ export async function finalizeScenarioAction(eventId: string, formData: FormData
       }),
     ]);
   }
-  revalidatePath(`/events/${event.slug}`);
-  revalidatePath("/dashboard");
+  touchEvent(event.slug);
   return { ok: true as const };
 }
 

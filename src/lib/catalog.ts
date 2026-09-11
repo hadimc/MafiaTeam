@@ -429,7 +429,7 @@ export const HOUSE_RULES = [
 export const EXIT_CARDS = [
   ["mind", "ذهن زیبا", "Beautiful Mind", "حدس نقش نوستراداموس، جک، یا طلسم جک.", "Guess Nostradamus, Jack, or Jack’s curse."],
   ["silence", "سکوت بره‌ها", "Silence of the Lambs", "دو نفر را برای روز بعد ساکت می‌کند.", "Silences two players for the next day."],
-  ["handcuffs", "دستبند", "Handcuffs", "توانایی یک نفر را برای امشب می‌گیرد.", "Blocks one player’s night ability."],
+  ["handcuffs", "دستبند", "Handcuffs", "توانایی یک نفر را برای شب بعد می‌گیرد.", "Blocks one living player’s night ability for the following night."],
   ["reveal", "افشای نقش", "Reveal role", "خارج‌شونده باید نقش دقیق خود را بگوید.", "Must announce their exact role."],
   ["face", "تغییر چهره", "Face-off", "کارت خود را مخفیانه با یک حاضر عوض می‌کند.", "Secretly swaps cards with another living player."],
 ] as const;

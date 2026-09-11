@@ -25,22 +25,31 @@ export function CopyLink({ url, label }: { url: string; label?: string }) {
   );
 }
 
-export function ShareJoinLink({ slug }: { slug: string }) {
+export function ShareJoinLink({
+  slug,
+  path,
+  label,
+  hint,
+}: {
+  slug: string;
+  path?: string;
+  label?: string;
+  hint?: string;
+}) {
   const { t } = useLang();
   const [copied, setCopied] = useState(false);
-  const path = `/events/${slug}`;
+  const sharePath = path ?? `/events/${slug}`;
 
   async function copy() {
-    const origin = window.location.origin;
-    await navigator.clipboard.writeText(`${origin}${path}`);
+    await navigator.clipboard.writeText(`${window.location.origin}${sharePath}`);
     setCopied(true);
   }
 
   return (
     <div className="space-y-2">
-      <p className="text-sm text-muted">{t("shareLinkHint")}</p>
+      <p className="text-sm text-muted">{hint ?? t("shareLinkHint")}</p>
       <Button variant="ghost" onClick={() => void copy()}>
-        {copied ? t("copied") : t("shareLink")}
+        {copied ? t("copied") : (label ?? t("shareLink"))}
       </Button>
     </div>
   );

@@ -163,6 +163,15 @@ export function canReopenScenario(status: string) {
   return status === "scenario_finalized" || status === "roles_assigned" || status === "in_progress";
 }
 
+export function hasFinalizedScenario(status: string) {
+  return (
+    status === "scenario_finalized" ||
+    status === "roles_assigned" ||
+    status === "in_progress" ||
+    status === "finished"
+  );
+}
+
 export function factionLabel(faction: string) {
   if (faction === "mafia") return "Mafia";
   if (faction === "independent") return "Independent";

@@ -22,11 +22,13 @@ import {
   lecterSelfSaved,
   livingHolds,
   mafiaLostAMember,
+  nightActionTypesForRole,
+  nightDisables,
   NIGHT_ACTION_ROLE,
   NIGHT_REPLACEABLE,
   resolveNight,
+  roleDisabledOnNight,
   stageFromGame,
-  tonightTarget,
 } from "@/lib/stages";
 
 async function narratorGame(gameId: string) {
@@ -44,6 +46,7 @@ function revalidateGame(gameId: string, slug: string) {
   revalidatePath(`/games/${gameId}/role`);
   revalidatePath(`/events/${slug}`);
   revalidatePath(`/events/${slug}/players`);
+  revalidatePath(`/events/${slug}/briefing`);
   revalidatePath("/dashboard");
   revalidatePath("/past");
   revalidatePath("/admin/events");
@@ -317,7 +320,7 @@ export async function recordJackCurseAction(gameId: string, targetPlayerId: stri
     (action) => action.actionType === "shown" && action.targetPlayerId === jack.id,
   );
   if (shown) return { error: "frozen" };
-  if (tonightTarget(game.actions, game.currentDay, "matador") === jack.id) return { error: "blocked" };
+  if (roleDisabledOnNight(game.actions, game.players, game.currentDay, "jack")) return { error: "blocked" };
 
   const round = jackCurseRound(
     game.actions,
@@ -361,13 +364,16 @@ export async function recordStageAction(
   ) {
     return { error: "role_out" };
   }
-  if (actionType !== "matador") {
-    const blockedId = tonightTarget(game.actions, game.currentDay, "matador");
-    const blocked = game.players.find((player) => player.id === blockedId);
-    if (blocked && requiredRole === blocked.roleKey) return { error: "blocked" };
-    if (blocked?.roleKey === "godfather" && (actionType === "mafiaShot" || actionType === "sixthSense")) {
+  if (actionType !== "handcuffs") {
+    const disabled = nightDisables(game.actions, game.players, game.currentDay);
+    if (requiredRole && disabled.some((item) => item.roleKey === requiredRole)) return { error: "blocked" };
+    if (disabled.some((item) => item.roleKey === "godfather") && (actionType === "mafiaShot" || actionType === "sixthSense")) {
       return { error: "blocked" };
     }
+  }
+  if (actionType === "handcuffs" && targetPlayerId) {
+    const target = game.players.find((player) => player.id === targetPlayerId);
+    if (!target || !target.alive) return { error: "not_found" };
   }
   const otherNights = (type: string) =>
     game.actions.filter((action) => action.actionType === type && action.dayNumber !== game.currentDay);
@@ -422,13 +428,9 @@ export async function recordStageAction(
     await reverseTonightTypes(gameId, game.currentDay, replaceTypes);
   }
 
-  if (actionType === "matador" && targetPlayerId) {
+  if ((actionType === "matador" || actionType === "handcuffs") && targetPlayerId) {
     const target = game.players.find((player) => player.id === targetPlayerId);
-    const blockedTypes = Object.entries(NIGHT_ACTION_ROLE)
-      .filter(([, role]) => role === target?.roleKey)
-      .map(([type]) => type);
-    if (target?.roleKey === "godfather") blockedTypes.push("mafiaShot");
-    if (target?.roleKey === "jack") blockedTypes.push("jack");
+    const blockedTypes = nightActionTypesForRole(target?.roleKey);
     if (blockedTypes.length) {
       await reverseTonightTypes(gameId, game.currentDay, blockedTypes);
     }
@@ -914,6 +916,7 @@ export async function resetGameAction(gameId: string) {
   ]);
   revalidatePath(`/events/${slug}`);
   revalidatePath(`/events/${slug}/players`);
+  revalidatePath(`/events/${slug}/briefing`);
   revalidatePath("/dashboard");
   revalidatePath("/past");
   revalidatePath("/admin/events");
