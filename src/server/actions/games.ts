@@ -12,7 +12,7 @@ import {
   type Phase,
   type RoleDef,
 } from "@/engine";
-import { nightStepLabel } from "@/lib/catalog";
+import { CATALOG_BY_KEY, nightStepLabel } from "@/lib/catalog";
 import { getGameForNarrator, isNarrator, readSnapshot, snapshotFromScenario } from "@/lib/queries";
 import {
   activeJackCurse,
@@ -218,6 +218,16 @@ async function undoNightResolution(gameId: string, nightNumber: number) {
         data: { alive: false, eliminatedAt: new Date(), eliminationReason: "night_undo" },
       });
     }
+    if (action.actionType === "saulConvert" && action.targetPlayerId) {
+      try {
+        const meta = JSON.parse(action.metadata || "{}") as { prevRole?: RoleCard };
+        if (meta.prevRole) {
+          await prisma.gamePlayer.update({ where: { id: action.targetPlayerId }, data: meta.prevRole });
+        }
+      } catch {
+        // ignore malformed metadata; nothing to revert
+      }
+    }
   }
 }
 
@@ -251,6 +261,10 @@ async function applyNightResolution(gameId: string, nightNumber: number) {
 
   for (const playerId of result.returnIds) {
     await revivePlayerAction(gameId, playerId, meta);
+  }
+
+  if (result.saulConvertId) {
+    await convertToMafiaAction(gameId, result.saulConvertId, meta);
   }
 
   if (result.leaveIds.length || result.returnIds.length || result.shieldBreakIds.length || result.notes.length) {
@@ -623,6 +637,45 @@ export async function revivePlayerAction(gameId: string, playerId: string, metad
     `${player.user.displayNameEn || player.user.displayName} returned to the game`,
     playerId,
     metadata,
+  );
+  revalidateGame(gameId, game.event.slug);
+}
+
+/** Saul's purchase succeeded: converts a plain citizen into a Mafioso from this point on. */
+export async function convertToMafiaAction(gameId: string, playerId: string, metadata = "{}") {
+  const { user, game } = await narratorGame(gameId);
+  const player = game.players.find((item) => item.id === playerId);
+  if (!player || !player.alive) return { error: "not_found" };
+  const mafioso = CATALOG_BY_KEY.mafioso;
+  const prevRole = roleCard(player);
+  const nextRole: RoleCard = {
+    roleKey: mafioso.key,
+    roleName: mafioso.name,
+    roleNameEn: mafioso.nameEn,
+    faction: mafioso.faction,
+    roleDescription: mafioso.description,
+    roleDescriptionEn: mafioso.descriptionEn,
+  };
+  await prisma.gamePlayer.update({
+    where: { id: playerId },
+    data: nextRole,
+  });
+  let meta: Record<string, unknown> = {};
+  try {
+    meta = JSON.parse(metadata || "{}");
+  } catch {
+    meta = {};
+  }
+  await log(
+    gameId,
+    game.currentDay,
+    game.currentPhase,
+    user.id,
+    "saulConvert",
+    `${player.user.displayName} توسط ساول جذب مافیا شد`,
+    `${player.user.displayNameEn || player.user.displayName} was recruited into the Mafia by Saul.`,
+    playerId,
+    JSON.stringify({ ...meta, prevRole }),
   );
   revalidateGame(gameId, game.event.slug);
 }

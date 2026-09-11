@@ -347,6 +347,36 @@ test("appliedNightOutcome reads the committed leave/return log for a night, not 
   assert.deepEqual(applied.leaveIds, ["k"]);
 });
 
+const saul = player("s", "saul", "mafia");
+
+test("Saul's purchase succeeds on a plain citizen and marks them for conversion", () => {
+  const result = resolveNight([act("saul", villager.id)], [saul, villager], 1);
+  assert.equal(result.saulConvertId, villager.id);
+  assert.equal(result.notes.some((note) => /purchase succeeded/i.test(note)), true);
+});
+
+test("Saul's purchase fails on a player with a role", () => {
+  const result = resolveNight([act("saul", watson.id)], [saul, watson], 1);
+  assert.equal(result.saulConvertId, null);
+  assert.equal(result.notes.some((note) => /purchase failed/i.test(note)), true);
+});
+
+test("Saul's purchase fails on another Mafia member (already has a role)", () => {
+  const result = resolveNight([act("saul", lecter.id)], [saul, lecter], 1);
+  assert.equal(result.saulConvertId, null);
+});
+
+test("Matador blocking the Godfather does not cancel Saul's purchase", () => {
+  const godfather = player("g", "godfather", "mafia");
+  const matador = player("m", "matador", "mafia");
+  const result = resolveNight(
+    [act("saul", villager.id), act("matador", godfather.id)],
+    [saul, godfather, matador, villager],
+    1,
+  );
+  assert.equal(result.saulConvertId, villager.id);
+});
+
 test("night briefing still reports Kane's delayed leave after Kane is already marked dead", () => {
   // Regression: recomputing resolveNight for a past night using *today's* alive status used to
   // hide Kane's delayed leave, because the delayed-leave check requires Kane to still be alive.

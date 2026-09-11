@@ -511,6 +511,7 @@ export function resolveNight(
       shieldBreakIds: [] as string[],
       notes: [] as string[],
       kaneMafiaMarkId: null as string | null,
+      saulConvertId: null as string | null,
     };
   }
 
@@ -603,6 +604,18 @@ export function resolveNight(
     }
   }
 
+  const saulTargetId = ability("saul", "saul");
+  let saulConvertId: string | null = null;
+  if (saulTargetId) {
+    const target = byId.get(saulTargetId);
+    if (target?.roleKey === "villager") {
+      saulConvertId = target.id;
+      notes.push("Saul’s purchase succeeded. That player joins the Mafia from tonight on.");
+    } else if (target) {
+      notes.push("Saul’s purchase failed. That player already has a role.");
+    }
+  }
+
   const leon = players.find((player) => player.roleKey === "leon");
   if (leonTargetId && leon) {
     const target = byId.get(leonTargetId);
@@ -686,6 +699,7 @@ export function resolveNight(
     shieldBreakIds: [...new Set(shieldBreakIds)],
     notes,
     kaneMafiaMarkId,
+    saulConvertId,
   };
 }
 

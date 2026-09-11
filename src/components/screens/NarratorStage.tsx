@@ -1121,6 +1121,8 @@ function MafiaNight({
   const sixthAction = tonightAction(game.actions, game.currentDay, "sixthSense");
   const sixthTarget = sixthAction?.targetPlayerId ?? null;
   const sixthGuess = sixthSenseGuess(sixthAction);
+  const preview = resolveNight(game.actions, game.players, game.currentDay);
+  const saulNotes = preview.notes.filter((note) => /saul|purchase/i.test(note));
   const options = [
     ...(canShot ? [{ key: "mafiaShot" as const, label: "Shot" }] : []),
     ...(canSixth ? [{ key: "sixthSense" as const, label: "Sixth sense" }] : []),
@@ -1223,6 +1225,13 @@ function MafiaNight({
                     </Button>
                   </div>
                 ) : null}
+                {selectedMain === "saul"
+                  ? saulNotes.map((note) => (
+                      <p key={note} className="mt-2 text-xs text-gold">
+                        {note}
+                      </p>
+                    ))
+                  : null}
               </div>
             ) : null}
           </>
