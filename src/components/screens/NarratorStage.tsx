@@ -474,6 +474,10 @@ function TaskBody({
         </>
       ) : null}
 
+      {task.key === "zodiac" ? (
+        <ZodiacShot game={game} living={living} name={name} />
+      ) : null}
+
       {task.key === "mafia" && introNight ? <LikeOrder label="Like order" players={mafiaLikes} name={name} /> : null}
       {task.key === "town" && introNight ? (
         <LikeOrder label="Thumbs-up order" players={townLikes} name={name} />
@@ -587,6 +591,7 @@ const NIGHT_PICK_LABELS: { key: string; label: string }[] = [
   { key: "constantine", label: "Constantine" },
   { key: "gunner", label: "Gunner" },
   { key: "jack", label: "Jack curse" },
+  { key: "zodiac", label: "Zodiac shot" },
 ];
 
 function NightPreview({
@@ -794,6 +799,61 @@ function JackCurse({
         />
       )}
     </div>
+  );
+}
+
+function ZodiacShot({
+  game,
+  living,
+  name,
+}: {
+  game: Game;
+  living: Player[];
+  name: (player?: Player) => string;
+}) {
+  const line = nightLine(
+    "zodiac",
+    scenarioRoleKeys(readSnapshot(game.scenarioSnapshot).roles),
+    game.players,
+    publicPlayerIds(game.actions),
+  );
+  const zodiac = living.find((player) => player.roleKey === "zodiac");
+  const target = tonightTarget(game.actions, game.currentDay, "zodiac");
+  const preview = resolveNight(game.actions, game.players, game.currentDay);
+  const notes = preview.notes.filter((note) => /zodiac/i.test(note));
+  return (
+    <>
+      <AbilityHeader label="Zodiac" holder={zodiac} name={name} />
+      {line === "record" && zodiac ? (
+        <>
+          <PickList
+            label="Shoot — tap the name again to cancel"
+            players={living.filter((player) => player.id !== zodiac.id)}
+            name={name}
+            selectedId={target}
+            onPick={(player) => {
+              if (target === player.id) {
+                void clearTonightAction(game.id, "zodiac");
+                return;
+              }
+              void recordStageAction(game.id, "zodiac", `Zodiac shot → ${name(player)}`, player.id);
+            }}
+          />
+          {target ? (
+            <Button variant="ghost" className="mt-2" onClick={() => clearTonightAction(game.id, "zodiac")}>
+              Cancel shot
+            </Button>
+          ) : null}
+          {notes.map((note) => (
+            <p key={note} className="mt-2 text-xs text-gold">
+              {note}
+            </p>
+          ))}
+        </>
+      ) : (
+        <Hint className="text-xs text-muted">Say the line. Nothing to record.</Hint>
+      )}
+    </>
   );
 }
 

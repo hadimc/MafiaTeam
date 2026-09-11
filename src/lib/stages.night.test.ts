@@ -278,3 +278,47 @@ test("Jack already out does not leave again when the cursed player leaves", () =
   assert.deepEqual(result.leaveIds, [villager.id]);
   assert.equal(result.notes.some((note) => /jack leaves/i.test(note)), false);
 });
+
+const zodiac = player("z", "zodiac", "independent");
+
+test("Zodiac is immune to the mafia shot", () => {
+  const result = resolveNight([act("mafiaShot", zodiac.id, 2)], [zodiac, watson], 2);
+  assert.deepEqual(result.leaveIds, []);
+});
+
+test("Zodiac is immune to Leon's shot", () => {
+  const result = resolveNight([act("leon", zodiac.id, 2)], [leon, zodiac], 2);
+  assert.deepEqual(result.leaveIds, []);
+});
+
+test("Zodiac's shot eliminates the target", () => {
+  const result = resolveNight([act("zodiac", villager.id, 2)], [zodiac, villager], 2);
+  assert.deepEqual(result.leaveIds, [villager.id]);
+  assert.equal(result.notes.some((note) => /zodiac.?s shot stands/i.test(note)), true);
+});
+
+test("Zodiac's shot works on Mafia too", () => {
+  const result = resolveNight([act("zodiac", lecter.id, 2)], [zodiac, lecter], 2);
+  assert.deepEqual(result.leaveIds, [lecter.id]);
+});
+
+test("Zodiac misfiring on Watson kills Zodiac instead", () => {
+  const result = resolveNight([act("zodiac", watson.id, 2)], [zodiac, watson], 2);
+  assert.deepEqual(result.leaveIds, [zodiac.id]);
+  assert.equal(result.notes.some((note) => /misfired/i.test(note)), true);
+});
+
+test("Zodiac shot is dropped once Zodiac is out", () => {
+  const deadZodiac = { ...zodiac, alive: false };
+  const result = resolveNight([act("zodiac", villager.id, 2)], [deadZodiac, villager], 2);
+  assert.deepEqual(result.leaveIds, []);
+  assert.equal(result.notes.some((note) => /zodiac is out/i.test(note)), true);
+});
+
+test("Zodiac task only appears on even nights", () => {
+  const line = (key: string) => (key === "zodiac" ? ("record" as const) : ("skip" as const));
+  const keys = (n: number) => nightTasks({ kind: "night", n }, false, line).map((task) => task.key);
+  assert.equal(keys(1).includes("zodiac"), false);
+  assert.equal(keys(2).includes("zodiac"), true);
+  assert.equal(keys(3).includes("zodiac"), false);
+});

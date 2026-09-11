@@ -354,6 +354,11 @@ export async function recordStageAction(
     const target = game.players.find((player) => player.id === targetPlayerId);
     if (target && target.faction !== "citizen") return { error: "not_citizen" };
   }
+  if (actionType === "zodiac" && targetPlayerId) {
+    if (game.currentDay % 2 !== 0) return { error: "not_zodiac_night" };
+    const zodiac = game.players.find((player) => player.roleKey === "zodiac");
+    if (zodiac && targetPlayerId === zodiac.id) return { error: "self" };
+  }
   if (actionType === "gunner") {
     let bulletType: "fake" | "real" = "fake";
     try {

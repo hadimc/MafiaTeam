@@ -111,6 +111,13 @@ const NIGHT_TASKS: StageTask[] = [
     notesEn: "Must switch every night. Curse stays on the person if cards swap. Freezes if Jack is shown.",
   },
   {
+    key: "zodiac",
+    nameEn: "Zodiac",
+    nameFa: "عملیات زودیاک",
+    summaryEn: "Even nights only: wake the Zodiac to shoot one player from either side.",
+    notesEn: "Skip on odd nights — the Zodiac is not woken. Night-immune to the Mafia shot and Leon's shot. Shooting Watson kills the Zodiac instead. Only a day vote or the Gunner's real round removes the Zodiac.",
+  },
+  {
     key: "mafia",
     nameEn: "Mafia",
     nameFa: "عملیات مافیا",
@@ -249,6 +256,7 @@ export function nightTasks(
     }
     if (task.key === "nostradamus") return stage.n === 0 && line("nostradamus") !== "skip";
     if (task.key === "jack") return line("jack") !== "skip";
+    if (task.key === "zodiac") return stage.n >= 2 && stage.n % 2 === 0 && line("zodiac") !== "skip";
     if (task.key === "mafia") return anyMafia;
     if (task.key === "town") return anyTown;
     if (task.key === "nightEnd") return stage.n >= 1;
@@ -392,7 +400,7 @@ export function gunnerActiveHolders(
 }
 
 const NIGHT_PHASES = new Set(["night", "intro_night", "night_resolution"]);
-const NIGHT_IMMUNE = new Set(["jack", "nostradamus"]);
+const NIGHT_IMMUNE = new Set(["jack", "nostradamus", "zodiac"]);
 const MAFIA_MAIN = ["mafiaShot", "sixthSense", "saul"] as const;
 export const NIGHT_REPLACEABLE = [
   ...MAFIA_MAIN,
@@ -404,6 +412,7 @@ export const NIGHT_REPLACEABLE = [
   "detective",
   "constantine",
   "gunner",
+  "zodiac",
 ] as const;
 
 export type NightPickAction = {
@@ -432,6 +441,7 @@ export const NIGHT_ACTION_ROLE: Record<string, string> = {
   detective: "detective",
   constantine: "constantine",
   gunner: "gunner",
+  zodiac: "zodiac",
 };
 
 export function livingHolds(
@@ -528,6 +538,7 @@ export function resolveNight(
     leon: "Leon is out. That shot does not apply.",
     kane: "Kane is out. That coupon does not apply.",
     constantine: "Constantine is out. Nobody returns.",
+    zodiac: "Zodiac is out. That shot does not apply.",
   };
   for (const actionType of dropped) {
     const note = droppedNote[actionType];
@@ -595,13 +606,10 @@ export function resolveNight(
       } else if (target.faction === "citizen") {
         leave.add(leon.id);
         notes.push("Citizen hit. Leon is out. The citizen stays.");
-      } else if (
-        (target.roleKey === "godfather" || target.roleKey === "zodiac") &&
-        hasShield(actions, target.id, nightNumber)
-      ) {
+      } else if (target.roleKey === "godfather" && hasShield(actions, target.id, nightNumber)) {
         shieldBreakIds.push(target.id);
         notes.push("Shield broken. That player stays.");
-      } else if (target.faction === "mafia" || target.roleKey === "zodiac") {
+      } else if (target.faction === "mafia") {
         if (lecterSave === target.id) {
           notes.push("Lecter saved the Leon target. They stay.");
         } else {
@@ -631,6 +639,21 @@ export function resolveNight(
       if (marked?.faction === "mafia") {
         leave.add(kanePlayer.id);
         notes.push("Kane sat with Mafia last night. Kane leaves.");
+      }
+    }
+  }
+
+  const zodiacPlayer = players.find((player) => player.roleKey === "zodiac");
+  const zodiacTargetId = ability("zodiac", "zodiac");
+  if (zodiacTargetId && zodiacPlayer && zodiacPlayer.alive !== false) {
+    const target = byId.get(zodiacTargetId);
+    if (target) {
+      if (target.roleKey === "watson") {
+        leave.add(zodiacPlayer.id);
+        notes.push("Zodiac misfired on the Doctor. The shot fails and Zodiac leaves instead.");
+      } else {
+        leave.add(target.id);
+        notes.push("Zodiac’s shot stands. That player leaves.");
       }
     }
   }

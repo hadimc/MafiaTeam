@@ -200,6 +200,19 @@ export const CATALOG_ROLES: CatalogRole[] = [
     description: "در شب معارفه سه نفر را انتخاب می‌کند. اگر دو یا بیشتر مافیا باشند ناچار با مافیا است.",
     descriptionEn: "On intro night, points at three players. If two or more are Mafia, he must join Mafia. Otherwise he chooses a side. Night-immune. Mafia do not open eyes with him.",
   },
+  {
+    key: "zodiac",
+    name: "زودیاک",
+    nameEn: "Zodiac",
+    faction: "independent",
+    dealable: true,
+    nightOrder: 1,
+    summaryEn: "Shoots anyone every other night; immune to night kills",
+    description:
+      "در شب‌های زوج (۲، ۴، ...) توسط گرداننده بیدار می‌شود و می‌تواند به یک بازیکن از هر ساید (شهروند یا مافیا) شلیک کرده و او را از بازی خارج کند. در برابر شلیک شب مافیا یا حرفه‌ای (لئون) نامیرا است. اگر به اشتباه به دکتر واتسون شلیک کند، قابلیتش خنثی و خودش از بازی خارج می‌شود. تنها با رأی روز یا گلوله جنگیِ گرفته‌شده از تفنگ‌دار از بازی خارج می‌شود.",
+    descriptionEn:
+      "On even nights (2, 4, ...) the narrator wakes the Zodiac to shoot one player from either side, eliminating them. Immune to the Mafia’s night shot and Leon’s shot. Misfiring on Dr. Watson neutralizes the ability and kills the Zodiac instead. Can only be removed by a day vote or the Gunner’s real round.",
+  },
 ];
 
 export const DEALABLE_ROLES = CATALOG_ROLES.filter((role) => role.dealable);
@@ -209,6 +222,7 @@ const MAFIA_KEYS = new Set(["godfather", "saul", "lecter", "matador", "mafioso"]
 const NIGHT_SEQUENCE = [
   "nostradamus",
   "jack",
+  "zodiac",
   "mafia",
   "watson",
   "leon",
