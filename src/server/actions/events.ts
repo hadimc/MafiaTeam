@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireAdmin, requireUser } from "@/lib/auth";
-import { getEventBySlug, isNarrator } from "@/lib/queries";
+import { getEventBySlug, canManageEventScenario, isNarrator } from "@/lib/queries";
 import { MAX_NARRATORS } from "@/lib/roster";
 import { isRosterOpen, canReopenScenario } from "@/lib/stats";
 import {
@@ -189,7 +189,7 @@ export async function assignNarratorAction(eventId: string, userId: string) {
 export async function reopenScenarioAction(eventId: string) {
   const user = await requireUser();
   const event = await eventWithNarrators(eventId);
-  if (!event || !isNarrator(user, event)) return { error: "forbidden" };
+  if (!event || !canManageEventScenario(user, event)) return { error: "forbidden" };
   if (!canReopenScenario(event.status)) return { error: "locked" };
 
   await prisma.$transaction([
@@ -206,7 +206,7 @@ export async function reopenScenarioAction(eventId: string) {
 export async function selectScenarioAction(eventId: string, scenarioId: string) {
   const user = await requireUser();
   const event = await eventWithNarrators(eventId);
-  if (!event || !isNarrator(user, event)) return { error: "forbidden" };
+  if (!event || !canManageEventScenario(user, event)) return { error: "forbidden" };
   if (!rosterUnlocked(event)) return { error: "locked" };
 
   await prisma.event.update({
@@ -225,7 +225,7 @@ export async function finalizeScenarioAction(eventId: string, formData: FormData
     where: { id: eventId },
     include: { narrators: true, registrations: true, scenario: true },
   });
-  if (!event || !isNarrator(user, event)) return { error: "forbidden" };
+  if (!event || !canManageEventScenario(user, event)) return { error: "forbidden" };
   if (event.narrators.length < 1) return { error: "incomplete" };
   if (!rosterUnlocked(event)) return { error: "locked" };
 

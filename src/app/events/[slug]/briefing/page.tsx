@@ -19,6 +19,7 @@ export default async function EventBriefingPage({ params }: { params: Promise<{ 
           slug: event.slug,
           title: event.title,
           titleEn: event.titleEn,
+          scenarioSnapshot: event.games[0]?.scenarioSnapshot ?? null,
           scenario: {
             name: event.scenario.name,
             nameEn: event.scenario.nameEn,

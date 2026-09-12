@@ -13,7 +13,7 @@ import {
   type RoleDef,
 } from "@/engine";
 import { CATALOG_BY_KEY, nightStepLabel } from "@/lib/catalog";
-import { getGameForNarrator, isNarrator, readSnapshot, snapshotFromScenario } from "@/lib/queries";
+import { canManageEventScenario, getGameForNarrator, isNarrator, readSnapshot, snapshotFromScenario } from "@/lib/queries";
 import {
   activeJackCurse,
   gunnerActiveHolders,
@@ -63,7 +63,7 @@ export async function dealRolesAction(eventId: string) {
       games: true,
     },
   });
-  if (!event || !isNarrator(user, event)) return { error: "forbidden" };
+  if (!event || !canManageEventScenario(user, event)) return { error: "forbidden" };
   if (event.narrators.length < 1 || !event.scenario) return { error: "incomplete" };
   if (event.status !== "scenario_finalized") {
     return { error: "not_final" };

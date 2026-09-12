@@ -26,3 +26,25 @@ export function briefingRoles<T extends { key: string; quantity: number }>(roles
   }
   return ordered;
 }
+
+export function briefingPlayerCount(roles: { quantity: number }[]) {
+  return roles.reduce((sum, role) => sum + Math.max(0, role.quantity), 0);
+}
+
+/** Roles actually locked in for this night — never a catalog preset for the headcount. */
+export function lockInBriefingRoles<T extends { key: string; quantity: number }>(
+  scenarioRoles: T[],
+  snapshotRaw?: string | null,
+) {
+  if (snapshotRaw) {
+    try {
+      const snapshot = JSON.parse(snapshotRaw) as { roles?: T[] };
+      if (Array.isArray(snapshot.roles) && snapshot.roles.some((role) => role.quantity > 0)) {
+        return briefingRoles(snapshot.roles);
+      }
+    } catch {
+      // Use the event's finalized scenario roles.
+    }
+  }
+  return briefingRoles(scenarioRoles);
+}
