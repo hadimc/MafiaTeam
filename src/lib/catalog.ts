@@ -474,6 +474,13 @@ export function playerCount(qty: Record<string, number>) {
   }, 0);
 }
 
+export function scenariosMatchingPlayerCount<T extends { supportedPlayerCount: number }>(
+  scenarios: T[],
+  seatedPlayers: number,
+) {
+  return scenarios.filter((scenario) => scenario.supportedPlayerCount === seatedPlayers);
+}
+
 export function maxQuantity(key: string) {
   if (key === "host" || key === "assistant") return 1;
   if (key === "villager") return 12;

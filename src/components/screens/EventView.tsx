@@ -9,7 +9,7 @@ import { RoleReveal } from "@/components/screens/RoleReveal";
 import { Roster, RosterPeek, AddPlayerForm, type ClubMember } from "@/components/screens/Roster";
 import { ShareJoinLink } from "@/components/CopyLink";
 import type { SessionUser } from "@/lib/auth";
-import { DEALABLE_ROLES, maxQuantity, playerCount } from "@/lib/catalog";
+import { DEALABLE_ROLES, maxQuantity, playerCount, scenariosMatchingPlayerCount } from "@/lib/catalog";
 import { MAX_NARRATORS, splitRoster } from "@/lib/roster";
 import { useLivePull } from "@/lib/live";
 import {
@@ -150,13 +150,10 @@ export function EventView({
   const winnerFaction = winner ? asFaction(winner) : undefined;
   const overview = game ? gameOverview(game) : null;
   const name = (person: Person) => enName(person);
-  const attendees = narrators.length + players.length;
   const dealt = playerCount(qty);
   const mine = game?.players.find((player) => player.userId === user.id);
   const catalog = scenarios.filter((s) => s.active);
-  const matching = catalog.filter(
-    (s) => s.attendeeCount === attendees || s.supportedPlayerCount === players.length,
-  );
+  const matching = scenariosMatchingPlayerCount(catalog, players.length);
   const picker = matching.length ? matching : catalog;
 
   useEffect(() => {
@@ -490,7 +487,8 @@ export function EventView({
               </option>
               {picker.map((scenario) => (
                 <option key={scenario.id} value={scenario.id}>
-                  {scenario.nameEn || scenario.name} · {scenario.attendeeCount} {t("attendees").toLowerCase()}
+                  {scenario.nameEn || scenario.name} · {scenario.supportedPlayerCount}{" "}
+                  {t("players").toLowerCase()}
                 </option>
               ))}
             </select>
