@@ -115,7 +115,7 @@ export const dictionary = {
   beNarrator: { fa: "راوی شو", en: "Be narrator" },
   bePlayer: { fa: "بازیکن شو", en: "Be player" },
   adjustRoles: { fa: "ترکیب نقش‌ها", en: "Adjust roles" },
-  matchingScenarios: { fa: "سناریوهای مناسب این تعداد", en: "Scenarios for this group size" },
+  matchingScenarios: { fa: "سناریوهای مناسب این تعداد بازیکن", en: "Scenarios for this many players" },
   noMatchScenarios: { fa: "هم‌اندازه‌ای نیست — یکی را انتخاب کن و نقش‌ها را عوض کن", en: "No exact match — pick one and change the roles" },
   seatedVsDealt: { fa: "نقش‌ها باید با تعداد بازیکنان یکی باشد", en: "Dealt roles must match the number of players" },
   hideRole: { fa: "پنهان کردن", en: "Hide" },
