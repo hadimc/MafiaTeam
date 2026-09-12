@@ -137,6 +137,7 @@ export function EventView({
 
   const registered = event.registrations.some((r) => r.userId === user.id);
   const amNarrator = event.narrators.some((n) => n.userId === user.id);
+  const canEditScenario = amNarrator || user.isAdmin;
   const { narrators, players } = splitRoster(event.registrations, event);
   const game = event.games[0];
   const gameId = game?.id;
@@ -470,7 +471,7 @@ export function EventView({
         </>
       ) : null}
 
-      {amNarrator && setup && rosterOpen ? (
+      {canEditScenario && setup && rosterOpen ? (
         <form action={finalize}>
           <Panel className="space-y-3">
             <h2 className="display text-lg font-semibold">{t("scenarioSetup")}</h2>
@@ -517,7 +518,7 @@ export function EventView({
         </form>
       ) : null}
 
-      {amNarrator && canDeal(event.status) ? (
+      {canEditScenario && canDeal(event.status) ? (
         <Panel className="space-y-3">
           <h2 className="display text-lg font-semibold">{t("scenarioFinalized")}</h2>
           <p className="text-sm text-muted">
@@ -531,7 +532,7 @@ export function EventView({
         </Panel>
       ) : null}
 
-      {amNarrator && canReopenScenario(event.status) && !canDeal(event.status) ? (
+      {canEditScenario && canReopenScenario(event.status) && !canDeal(event.status) ? (
         dealtCards && warnReset ? (
           <Panel className="space-y-3">
             <p className="text-sm text-muted">{t("resetGameWarn")}</p>

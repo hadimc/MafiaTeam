@@ -3,7 +3,7 @@
 import { useState, useSyncExternalStore, type ReactNode } from "react";
 import { Button, FactionPill, Panel } from "@/components/ui";
 import { EXIT_CARDS, HOUSE_RULES } from "@/lib/catalog";
-import { briefingRoles, displayScenarioName } from "@/lib/briefing";
+import { displayScenarioName, lockInBriefingRoles, briefingPlayerCount } from "@/lib/briefing";
 import { t, type Lang, type Msg } from "@/lib/i18n";
 import { asFaction } from "@/lib/stats";
 
@@ -65,6 +65,7 @@ export function EventBriefing({
     slug: string;
     title: string;
     titleEn: string;
+    scenarioSnapshot?: string | null;
     scenario: {
       name: string;
       nameEn: string;
@@ -82,7 +83,8 @@ export function EventBriefing({
   const tx = (key: Msg) => t(key, lang);
   const fa = lang === "fa";
   const scenario = event.scenario;
-  const roles = briefingRoles(scenario.roles);
+  const roles = lockInBriefingRoles(scenario.roles, event.scenarioSnapshot);
+  const playerCount = briefingPlayerCount(roles);
   const grouped = FACTIONS.map((faction) => ({
     faction,
     roles: roles.filter((role) => role.faction === faction),
@@ -146,7 +148,7 @@ export function EventBriefing({
           large
         />
         <p className="text-sm text-muted">
-          {scenario.supportedPlayerCount} {tx("players").toLowerCase()}
+          {playerCount} {tx("players").toLowerCase()}
         </p>
         {notes ? <BiBody fa={scenario.description} en={scenario.descriptionEn} lang={lang} /> : null}
       </Panel>

@@ -101,6 +101,8 @@ export function isNarrator(user: { id: string }, event: { narrators: { userId: s
   return isEventNarrator(user.id, event);
 }
 
+export { canManageEventScenario } from "./roster";
+
 export async function getGameForNarrator(gameId: string, user: SessionUser) {
   const game = await prisma.game.findUnique({
     where: { id: gameId },
