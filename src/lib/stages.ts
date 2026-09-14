@@ -645,10 +645,6 @@ export function resolveNight(
   const immune = (player: NightPlayer) =>
     NIGHT_IMMUNE.has(player.roleKey) ||
     (player.roleKey === "zodiac" && zodiacRules.mortality === "immortal");
-  const zodiacShieldUp = (player: NightPlayer) =>
-    player.roleKey === "zodiac" &&
-    zodiacRules.mortality === "one_shield" &&
-    hasShield(actions, player.id, nightNumber);
   const nightShieldUp = (player: NightPlayer) => {
     const carries =
       player.roleKey === "leon" ||
@@ -759,12 +755,15 @@ export function resolveNight(
         notes.push("Night-immune. The mafia shot does nothing.");
       } else if (watsonSave === target.id) {
         notes.push("Watson saved the mafia-shot target. They stay.");
-      } else if (target.roleKey === "leon" && hasShield(actions, target.id, nightNumber)) {
+      } else if (nightShieldUp(target)) {
         shieldBreakIds.push(target.id);
-        notes.push("Leon’s vest absorbed the mafia shot. They stay.");
-      } else if (zodiacShieldUp(target)) {
-        shieldBreakIds.push(target.id);
-        notes.push("Zodiac’s shield absorbed the mafia shot. They stay.");
+        notes.push(
+          target.roleKey === "leon"
+            ? "Leon’s vest absorbed the mafia shot. They stay."
+            : target.roleKey === "zodiac"
+              ? "Zodiac’s shield absorbed the mafia shot. They stay."
+              : "Shield broken. That player stays.",
+        );
       } else {
         leave.add(target.id);
         notes.push("Mafia shot stands. That player leaves.");
@@ -815,15 +814,16 @@ export function resolveNight(
     if (target) {
       if (immune(target)) {
         notes.push("Night-immune. Leon’s shot does nothing.");
-      } else if (zodiacShieldUp(target)) {
+      } else if (nightShieldUp(target)) {
         shieldBreakIds.push(target.id);
-        notes.push("Zodiac’s shield absorbed Leon’s shot. They stay.");
+        notes.push(
+          target.roleKey === "zodiac"
+            ? "Zodiac’s shield absorbed Leon’s shot. They stay."
+            : "Shield broken. That player stays.",
+        );
       } else if (target.faction === "citizen") {
         leave.add(leon.id);
         notes.push("Citizen hit. Leon is out. The citizen stays.");
-      } else if (target.roleKey === "godfather" && hasShield(actions, target.id, nightNumber)) {
-        shieldBreakIds.push(target.id);
-        notes.push("Shield broken. That player stays.");
       } else if (target.faction === "mafia") {
         if (lecterSave === target.id) {
           notes.push("Lecter saved the Leon target. They stay.");

@@ -471,6 +471,28 @@ test("Leon then Zodiac on Godfather: shield drops, then Godfather leaves", () =>
   assert.deepEqual(result.shieldBreakIds, [godfather.id]);
 });
 
+test("Mafia then Leon on a one-shield Zodiac: shield drops, then Zodiac leaves", () => {
+  const result = resolveNight(
+    [act("mafiaShot", zodiac.id, 2), act("leon", zodiac.id, 2)],
+    [leon, zodiac, watson],
+    2,
+    { mortality: "one_shield", shootNights: "even", cursedRole: "watson" },
+  );
+  assert.deepEqual(result.leaveIds, [zodiac.id]);
+  assert.deepEqual(result.shieldBreakIds, [zodiac.id]);
+});
+
+test("Watson save on the mafia shot still lets a one-shield Zodiac keep the vest against Leon", () => {
+  const result = resolveNight(
+    [act("mafiaShot", zodiac.id, 2), act("watson", zodiac.id, 2), act("leon", zodiac.id, 2)],
+    [leon, zodiac, watson],
+    2,
+    { mortality: "one_shield", shootNights: "even", cursedRole: "watson" },
+  );
+  assert.deepEqual(result.leaveIds, []);
+  assert.deepEqual(result.shieldBreakIds, [zodiac.id]);
+});
+
 test("lastNightReport surfaces which Mafia player Kane's coupon marked", () => {
   const kane = player("k", "kane", "citizen");
   const result = lastNightReport([act("kane", lecter.id, 1)], 2, [kane, lecter]);

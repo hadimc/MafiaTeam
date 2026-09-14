@@ -1,8 +1,9 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useLang, enName } from "@/lib/lang";
+import { completedTonightTypes, latestNewCompletedType, nextNightFocus, nightStepElementId } from "@/lib/nightFocus";
 import { useGameLive } from "@/lib/useGameLive";
 import { Button, Panel, SeatAvatar } from "@/components/ui";
 import { factionLabel } from "@/lib/stats";
@@ -132,6 +133,10 @@ export function NarratorStage({ game }: { game: Game }) {
   const [exitCard, setExitCard] = useState<SnapshotExitCard | null>(null);
   const [jackOut, setJackOut] = useState<{ jackName: string; cursedName: string } | null>(null);
   const [danger, setDanger] = useState<null | "end" | "reset">(null);
+  const seenNightTypes = useRef<Set<string>>(new Set());
+  const nightKeyRef = useRef("");
+  const openedNightStart = useRef(false);
+  const [nightScroll, setNightScroll] = useState<{ step: string; token: number } | null>(null);
 
   useEffect(() => {
     if (game.currentPhase === "lobby" && game.status !== "finished") {
@@ -174,6 +179,51 @@ export function NarratorStage({ game }: { game: Game }) {
   };
   const back = prevStage(stage);
   const ahead = nextStage(stage);
+  const nightTaskKeys = stage.kind === "night" ? tasks.map((task) => task.key) : [];
+  const nightTaskKeyList = nightTaskKeys.join(",");
+  const tonightTypes = stage.kind === "night" ? completedTonightTypes(game.actions, game.currentDay) : new Set<string>();
+  const tonightTypeKey = [...tonightTypes].sort().join(",");
+
+  useEffect(() => {
+    if (stage.kind !== "night") {
+      nightKeyRef.current = "";
+      seenNightTypes.current = new Set();
+      openedNightStart.current = false;
+      return;
+    }
+    const nightKey = `${game.currentDay}:${game.currentPhase}`;
+    if (nightKeyRef.current !== nightKey) {
+      nightKeyRef.current = nightKey;
+      seenNightTypes.current = new Set();
+      openedNightStart.current = false;
+    }
+    const addedType = latestNewCompletedType(seenNightTypes.current, game.actions, game.currentDay);
+    seenNightTypes.current = new Set(tonightTypes);
+    if (!addedType) {
+      if (!openedNightStart.current && tonightTypes.size === 0) {
+        openedNightStart.current = true;
+        const first = nextNightFocus(null, nightTaskKeys, lineFor);
+        if (first) setOpen(first.task);
+      }
+      return;
+    }
+    openedNightStart.current = true;
+    const next = nextNightFocus(addedType, nightTaskKeys, lineFor);
+    if (!next) return;
+    setOpen(next.task);
+    setNightScroll({ step: next.step, token: Date.now() });
+  }, [tonightTypeKey, nightTaskKeyList, stage.kind, game.currentDay, game.currentPhase]);
+
+  useEffect(() => {
+    if (!nightScroll) return;
+    const timer = window.setTimeout(() => {
+      document.getElementById(nightStepElementId(nightScroll.step))?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [nightScroll]);
 
   async function overrideSeat(playerId: string, currentlyAlive: boolean, reason = "override") {
     if (currentlyAlive) {
@@ -246,7 +296,7 @@ export function NarratorStage({ game }: { game: Game }) {
 
       <ol className="mt-5 space-y-2">
         {tasks.map((task, index) => (
-          <li key={task.key}>
+          <li key={task.key} id={nightStepElementId(task.key)} className="scroll-mt-72">
             <button
               type="button"
               onClick={() => setOpen((current) => (current === task.key ? null : task.key))}
@@ -995,7 +1045,12 @@ function ZodiacShot({
   const notes = preview.notes.filter((note) => /zodiac/i.test(note));
   return (
     <>
-      <AbilityHeader label="Zodiac" holder={zodiac} name={name} />
+      <AbilityHeader
+        label="Zodiac"
+        holder={zodiac}
+        name={name}
+        tone={line === "cover" || !zodiac ? "cover" : "act"}
+      />
       <Hint className="text-xs">{zodiacDescription(rules, "en")}</Hint>
       {introNight ? (
         line === "record" && zodiac ? (
@@ -1178,15 +1233,26 @@ function AbilityHeader({
   label,
   holder,
   name,
+  tone = "act",
 }: {
   label: string;
   holder?: Player | null;
   name: (player?: Player) => string;
+  tone?: "act" | "cover" | "spent";
 }) {
+  const idle = tone === "cover" || tone === "spent";
   return (
-    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-      <p className="text-sm font-bold text-ink">{label}</p>
-      {holder ? (
+    <div className={`mb-2 flex flex-wrap items-center justify-between gap-2 ${idle ? "opacity-60" : ""}`}>
+      <p className={`text-sm font-bold ${idle ? "text-muted" : "text-ink"}`}>{label}</p>
+      {tone === "cover" ? (
+        <span className="inline-flex items-center rounded-full border border-line bg-bg-elev px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">
+          Out · no action
+        </span>
+      ) : tone === "spent" ? (
+        <span className="inline-flex items-center rounded-full border border-line bg-bg-elev px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">
+          Spent
+        </span>
+      ) : holder ? (
         <span className="inline-flex items-center gap-1.5 rounded-full border border-gold/50 bg-gold/15 px-2.5 py-1 text-xs font-semibold text-gold">
           <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gold text-[10px] font-bold text-black">
             {holder.seatNumber}
@@ -1205,6 +1271,7 @@ function NightAbility({
   blockedSource,
   holder,
   name,
+  step,
   children,
 }: {
   title: string;
@@ -1213,14 +1280,15 @@ function NightAbility({
   blockedSource?: "matador" | "handcuffs";
   holder?: Player | null;
   name: (player?: Player) => string;
+  step?: string;
   children: React.ReactNode;
 }) {
   if (line === "skip") return null;
   return (
-    <div>
-      <AbilityHeader label={title} holder={holder} name={name} />
+    <div id={step ? nightStepElementId(step) : undefined} className="scroll-mt-72">
+      <AbilityHeader label={title} holder={holder} name={name} tone={line === "cover" ? "cover" : "act"} />
       {line === "cover" ? (
-        <Hint className="text-xs text-muted">Say the line. Nothing to record.</Hint>
+        <Hint className="text-xs text-muted">Out. Say the line so the table does not learn. No action.</Hint>
       ) : blocked ? (
         <CannotActNote who={blocked} source={blockedSource} />
       ) : (
@@ -1428,6 +1496,7 @@ function MafiaNight({
       </div>
       <NightAbility
         title="Lecter save"
+        step="lecter"
         line={lineFor("lecter")}
         blocked={lecterDisabled?.who}
         blockedSource={lecterDisabled?.source}
@@ -1448,6 +1517,7 @@ function MafiaNight({
       </NightAbility>
       <NightAbility
         title="Matador disability"
+        step="matador"
         line={lineFor("matador")}
         blocked={matadorDisabled?.who}
         blockedSource={matadorDisabled?.source}
@@ -1536,6 +1606,7 @@ function TownNight({
       </Hint>
       <NightAbility
         title="Dr. Watson — save"
+        step="watson"
         line={lineFor("watson")}
         blocked={watsonDisabled?.who}
         blockedSource={watsonDisabled?.source}
@@ -1551,13 +1622,18 @@ function TownNight({
         />
       </NightAbility>
       {leonLine === "skip" ? null : (
-        <div>
-          <AbilityHeader label="Leon — shot" holder={leon} name={name} />
+        <div id={nightStepElementId("leon")} className="scroll-mt-72">
+          <AbilityHeader
+            label="Leon — shot"
+            holder={leon}
+            name={name}
+            tone={leonLine === "cover" || !leon ? "cover" : leonSpent ? "spent" : "act"}
+          />
           {leonLine === "cover" || leonSpent || !leon ? (
             leonSpent ? (
               <p className="text-xs text-muted">Leon’s two shots are spent.</p>
             ) : (
-              <Hint className="text-xs text-muted">Say the line. Nothing to record.</Hint>
+              <Hint className="text-xs text-muted">Out. Say the line so the table does not learn. No action.</Hint>
             )
           ) : leonDisabled ? (
             <CannotActNote who={leonDisabled.who} source={leonDisabled.source} />
@@ -1591,13 +1667,18 @@ function TownNight({
         </div>
       )}
       {kaneLine === "skip" ? null : (
-        <div>
-          <AbilityHeader label="Citizen Kane — coupon" holder={kane} name={name} />
+        <div id={nightStepElementId("kane")} className="scroll-mt-72">
+          <AbilityHeader
+            label="Citizen Kane — coupon"
+            holder={kane}
+            name={name}
+            tone={kaneLine === "cover" || !kane ? "cover" : kaneUsed ? "spent" : "act"}
+          />
           {kaneLine === "cover" || kaneUsed || !kane ? (
-            kaneUsed ? (
+            kaneUsed && kane ? (
               <p className="text-xs text-muted">Coupon already used.</p>
             ) : (
-              <Hint className="text-xs text-muted">Say the line. Nothing to record.</Hint>
+              <Hint className="text-xs text-muted">Out. Say the line so the table does not learn. No action.</Hint>
             )
           ) : kaneDisabled ? (
             <CannotActNote who={kaneDisabled.who} source={kaneDisabled.source} />
@@ -1631,22 +1712,18 @@ function TownNight({
         </div>
       )}
       {detectiveLine === "skip" ? null : (
-        <div>
-          <AbilityHeader label="Detective" holder={detective} name={name} />
-          <Hint className="text-xs text-muted">Say the line. Do not record the inquiry.</Hint>
-        </div>
-      )}
-      {lineFor("gunner") === "skip" ? null : (
-        <div>
-          <AbilityHeader label="Gunner — give gun" holder={living.find((player) => player.roleKey === "gunner")} name={name} />
-          <GunnerNight
-            game={game}
-            living={living}
+        <div id={nightStepElementId("detective")} className="scroll-mt-72">
+          <AbilityHeader
+            label="Detective"
+            holder={detective}
             name={name}
-            line={lineFor("gunner")}
-            blockedWho={gunnerDisabled?.who ?? null}
-            blockedSource={gunnerDisabled?.source}
+            tone={detectiveLine === "cover" || !detective ? "cover" : "act"}
           />
+          {detectiveLine === "cover" || !detective ? (
+            <Hint className="text-xs text-muted">Out. Say the line so the table does not learn. No action.</Hint>
+          ) : (
+            <Hint className="text-xs text-muted">Alive. Say the line. Do not record the inquiry.</Hint>
+          )}
         </div>
       )}
       {extras.map((item) => {
@@ -1660,13 +1737,18 @@ function TownNight({
         const extraDisabled = disableForRole(game, item.key, name);
         const holder = living.find((player) => player.roleKey === item.key);
         return (
-          <div key={item.key}>
-            <AbilityHeader label={item.label} holder={holder} name={name} />
+          <div key={item.key} id={nightStepElementId(item.key)} className="scroll-mt-72">
+            <AbilityHeader
+              label={item.label}
+              holder={holder}
+              name={name}
+              tone={line === "cover" || !holder ? "cover" : spent ? "spent" : "act"}
+            />
             {line === "cover" || spent ? (
-              spent ? (
+              spent && holder ? (
                 <p className="text-xs text-muted">Already used.</p>
               ) : (
-                <Hint className="text-xs text-muted">Say the line. Nothing to record.</Hint>
+                <Hint className="text-xs text-muted">Out. Say the line so the table does not learn. No action.</Hint>
               )
             ) : extraDisabled ? (
               <CannotActNote who={extraDisabled.who} source={extraDisabled.source} />
@@ -1695,6 +1777,24 @@ function TownNight({
           </div>
         );
       })}
+      {lineFor("gunner") === "skip" ? null : (
+        <div id={nightStepElementId("gunner")} className="scroll-mt-72">
+          <AbilityHeader
+            label="Gunner — give gun"
+            holder={living.find((player) => player.roleKey === "gunner")}
+            name={name}
+            tone={lineFor("gunner") === "cover" || !living.some((player) => player.roleKey === "gunner") ? "cover" : "act"}
+          />
+          <GunnerNight
+            game={game}
+            living={living}
+            name={name}
+            line={lineFor("gunner")}
+            blockedWho={gunnerDisabled?.who ?? null}
+            blockedSource={gunnerDisabled?.source}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -1722,7 +1822,7 @@ function GunnerNight({
   const targetTonight = tonight?.targetPlayerId ?? null;
 
   if (line === "cover" || !gunner) {
-    return <Hint className="text-xs text-muted">Say the line. Nothing to record.</Hint>;
+    return <Hint className="text-xs text-muted">Out. Say the line so the table does not learn. No action.</Hint>;
   }
   if (blockedWho) return <CannotActNote who={blockedWho} source={blockedSource} />;
   if (ammo.fakeLeft === 0 && ammo.realLeft === 0) {
