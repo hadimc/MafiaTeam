@@ -11,7 +11,7 @@ export function isDeliverableEmail(email: string) {
 }
 
 function mailFrom() {
-  return process.env.MAIL_FROM || process.env.SMTP_USER || "MafiaTeam <noreply@mafiabazi.fly.dev>";
+  return process.env.MAIL_FROM || process.env.SMTP_USER || "MafiaTeam <noreply@mafiateam.local>";
 }
 
 function smtpConfigured() {
