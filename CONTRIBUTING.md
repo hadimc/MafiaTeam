@@ -13,7 +13,7 @@ Do not open a PR from a clone of `hadimc/MafiaTeam` unless you were invited as a
 
 ## Maintainers
 
-Maintainers are invited people who review PRs, triage issues, and keep `main` healthy. They are listed in [CODEOWNERS](.github/CODEOWNERS).
+Maintainers are invited people who review PRs, triage issues, and keep `main` healthy. They are listed in [CODEOWNERS](.github/CODEOWNERS): [@hadimc](https://github.com/hadimc) and [@adelonte](https://github.com/adelonte).
 
 If you want to be a collaborator, ask a maintainer — do not add yourself.
 
