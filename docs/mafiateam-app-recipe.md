@@ -2,7 +2,7 @@
 
 Source of truth for rebuilding or extending MafiaTeam. Distilled from the original product spec plus every later product decision.
 
-**What it is:** a mobile-first web app for a private club (~20 regulars) that organizes in-person Mafia nights (usually 9–18 attendees).
+**What it is:** a mobile-first web app for an invite-only group that organizes in-person Mafia nights (usually 9–18 attendees).
 
 Three jobs:
 

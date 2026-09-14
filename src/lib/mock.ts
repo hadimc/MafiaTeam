@@ -28,11 +28,11 @@ export const mockPlayers: MockPlayer[] = [
   { id: "2", seat: 2, name: { fa: "سارا", en: "Sara" }, role: { fa: "پدرخوانده", en: "Godfather" }, faction: "mafia", status: "alive" },
   { id: "3", seat: 3, name: { fa: "رضا", en: "Reza" }, role: { fa: "لئون", en: "Leon" }, faction: "citizen", status: "alive" },
   { id: "4", seat: 4, name: { fa: "مینا", en: "Mina" }, role: { fa: "جک", en: "Jack" }, faction: "independent", status: "alive" },
-  { id: "5", seat: 5, name: { fa: "امیر", en: "Amir" }, role: { fa: "دکتر", en: "Doctor" }, faction: "citizen", status: "alive" },
+  { id: "5", seat: 5, name: { fa: "امید", en: "Omid" }, role: { fa: "دکتر", en: "Doctor" }, faction: "citizen", status: "alive" },
   { id: "6", seat: 6, name: { fa: "ندا", en: "Neda" }, role: { fa: "مافیای ساده", en: "Mafioso" }, faction: "mafia", status: "alive" },
   { id: "7", seat: 7, name: { fa: "بهرام", en: "Bahram" }, role: { fa: "شهروند", en: "Villager" }, faction: "citizen", status: "eliminated" },
   { id: "8", seat: 8, name: { fa: "لیلا", en: "Leila" }, role: { fa: "شهروند", en: "Villager" }, faction: "citizen", status: "alive" },
-  { id: "9", seat: 9, name: { fa: "کسری", en: "Kasra" }, role: { fa: "مافیای ساده", en: "Mafioso" }, faction: "mafia", status: "alive" },
+  { id: "9", seat: 9, name: { fa: "الناز", en: "Elnaz" }, role: { fa: "مافیای ساده", en: "Mafioso" }, faction: "mafia", status: "alive" },
   { id: "10", seat: 10, name: { fa: "زهرا", en: "Zahra" }, role: { fa: "شهروند", en: "Villager" }, faction: "citizen", status: "alive" },
   { id: "11", seat: 11, name: { fa: "نیما", en: "Nima" }, role: { fa: "شهروند", en: "Villager" }, faction: "citizen", status: "alive" },
   { id: "12", seat: 12, name: { fa: "رویا", en: "Roya" }, role: { fa: "شهروند", en: "Villager" }, faction: "citizen", status: "alive" },
@@ -59,15 +59,14 @@ export const mockExitCards = [
 export const mockLog = [
   { day: 1, phase: "day", text: { fa: "بهرام با ۷ رأی حذف شد", en: "Bahram eliminated with 7 votes" } },
   { day: 1, phase: "day", text: { fa: "بهرام کارت «سکوت» کشید", en: "Bahram drew Silence" } },
-  { day: 1, phase: "night", text: { fa: "مافیا امیر را هدف گرفت", en: "Mafia targeted Amir" } },
+  { day: 1, phase: "night", text: { fa: "مافیا امید را هدف گرفت", en: "Mafia targeted Omid" } },
   { day: 1, phase: "night", text: { fa: "دکتر رضا را نجات داد", en: "Doctor protected Reza" } },
   { day: 1, phase: "night", text: { fa: "کارآگاه مینا را استعلام کرد — منفی", en: "Detective checked Mina — negative" } },
 ];
 
 export const mockUsers = [
-  "هادی", "علی", "سارا", "رضا", "مینا", "امیر", "ندا", "بهرام",
-  "لیلا", "کامران", "زهرا", "سینا", "مریم", "پوریا", "نرگس",
-  "آرمان", "شیدا", "کیان", "هستی", "نیما",
+  "علی", "سارا", "رضا", "مینا", "ندا", "بهرام", "لیلا", "زهرا",
+  "نیما", "رویا", "پوریا", "نرگس", "امید", "الناز", "راوی",
 ];
 
 export const myRole = mockPlayers[2]; // Reza / Leon — player reveal demo
