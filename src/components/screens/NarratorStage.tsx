@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useLang, enName } from "@/lib/lang";
-import { completedTonightTypes, latestNewCompletedType, nextNightFocus, nightStepElementId } from "@/lib/nightFocus";
+import { completedTonightTypes, faceOffCardDrawn, latestNewCompletedType, nextNightFocus, nightStepElementId, openingDayFocus } from "@/lib/nightFocus";
 import { useGameLive } from "@/lib/useGameLive";
 import { Button, Panel, SeatAvatar } from "@/components/ui";
 import { factionLabel } from "@/lib/stats";
@@ -181,38 +181,51 @@ export function NarratorStage({ game }: { game: Game }) {
   const ahead = nextStage(stage);
   const nightTaskKeys = stage.kind === "night" ? tasks.map((task) => task.key) : [];
   const nightTaskKeyList = nightTaskKeys.join(",");
+  const dayTaskKeys = stage.kind === "day" ? tasks.map((task) => task.key) : [];
+  const dayTaskKeyList = dayTaskKeys.join(",");
   const tonightTypes = stage.kind === "night" ? completedTonightTypes(game.actions, game.currentDay) : new Set<string>();
   const tonightTypeKey = [...tonightTypes].sort().join(",");
+  const faceOffDrawn = faceOffCardDrawn(game.actions);
+  const stageKey = `${stage.kind}:${game.currentDay}:${game.currentPhase}`;
 
   useEffect(() => {
-    if (stage.kind !== "night") {
-      nightKeyRef.current = "";
+    if (nightKeyRef.current !== stageKey) {
+      nightKeyRef.current = stageKey;
       seenNightTypes.current = new Set();
+      openedNightStart.current = false;
+    }
+
+    if (stage.kind === "day") {
+      if (openedNightStart.current) return;
+      openedNightStart.current = true;
+      const first = openingDayFocus(dayTaskKeys);
+      if (!first) return;
+      setOpen(first.task);
+      setNightScroll({ step: first.step, token: Date.now() });
+      return;
+    }
+
+    if (stage.kind !== "night") {
       openedNightStart.current = false;
       return;
     }
-    const nightKey = `${game.currentDay}:${game.currentPhase}`;
-    if (nightKeyRef.current !== nightKey) {
-      nightKeyRef.current = nightKey;
-      seenNightTypes.current = new Set();
-      openedNightStart.current = false;
-    }
+
     const addedType = latestNewCompletedType(seenNightTypes.current, game.actions, game.currentDay);
     seenNightTypes.current = new Set(tonightTypes);
     if (!addedType) {
       if (!openedNightStart.current && tonightTypes.size === 0) {
         openedNightStart.current = true;
-        const first = nextNightFocus(null, nightTaskKeys, lineFor);
+        const first = nextNightFocus(null, nightTaskKeys, lineFor, { faceOffDrawn });
         if (first) setOpen(first.task);
       }
       return;
     }
     openedNightStart.current = true;
-    const next = nextNightFocus(addedType, nightTaskKeys, lineFor);
+    const next = nextNightFocus(addedType, nightTaskKeys, lineFor, { faceOffDrawn });
     if (!next) return;
     setOpen(next.task);
     setNightScroll({ step: next.step, token: Date.now() });
-  }, [tonightTypeKey, nightTaskKeyList, stage.kind, game.currentDay, game.currentPhase]);
+  }, [stageKey, tonightTypeKey, nightTaskKeyList, dayTaskKeyList, faceOffDrawn]);
 
   useEffect(() => {
     if (!nightScroll) return;

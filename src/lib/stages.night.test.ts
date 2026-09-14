@@ -425,6 +425,27 @@ test("Zodiac cursed role none: shooting Watson removes Watson", () => {
   assert.equal(result.notes.some((note) => /misfired/i.test(note)), false);
 });
 
+test("Watson self-save keeps Watson in against a Zodiac shot when there is no cursed role", () => {
+  const result = resolveNight(
+    [act("mafiaShot", villager.id, 2), act("watson", watson.id, 2), act("zodiac", watson.id, 2)],
+    [zodiac, watson, villager],
+    2,
+    { mortality: "immortal", shootNights: "even", cursedRole: null },
+  );
+  assert.deepEqual(result.leaveIds, [villager.id]);
+  assert.equal(result.notes.some((note) => /watson saved the zodiac/i.test(note)), true);
+});
+
+test("Watson save on another player also blocks that Zodiac shot", () => {
+  const result = resolveNight(
+    [act("watson", villager.id, 2), act("zodiac", villager.id, 2)],
+    [zodiac, watson, villager],
+    2,
+    { mortality: "immortal", shootNights: "even", cursedRole: null },
+  );
+  assert.deepEqual(result.leaveIds, []);
+});
+
 test("Zodiac cursed role can be any dealt role", () => {
   const result = resolveNight(
     [act("zodiac", lecter.id, 2)],

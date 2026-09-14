@@ -43,8 +43,8 @@ export const CATALOG_ROLES: CatalogRole[] = [
     dealable: true,
     nightOrder: 3,
     summaryEn: "Saves a player at night",
-    description: "هر شب می‌تواند یک نفر را از حمله مافیا نجات دهد. در طول بازی تنها یک‌بار می‌تواند خود را نجات دهد.",
-    descriptionEn: "Each night may protect one player from the Mafia shot. May self-save only once.",
+    description: "هر شب می‌تواند یک نفر را از شلیک شب مافیا یا زودیاک نجات دهد. در طول بازی تنها یک‌بار می‌تواند خود را نجات دهد.",
+    descriptionEn: "Each night may protect one player from the Mafia shot or the Zodiac shot. May self-save only once.",
   },
   {
     key: "leon",
