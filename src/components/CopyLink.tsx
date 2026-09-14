@@ -25,6 +25,44 @@ export function CopyLink({ url, label }: { url: string; label?: string }) {
   );
 }
 
+export function CopyLinkIcon({
+  path,
+  label,
+}: {
+  path: string;
+  label?: string;
+}) {
+  const { t } = useLang();
+  const [copied, setCopied] = useState(false);
+
+  async function copy() {
+    await navigator.clipboard.writeText(`${window.location.origin}${path}`);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1500);
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => void copy()}
+      title={copied ? t("copied") : (label ?? t("copyLink"))}
+      aria-label={copied ? t("copied") : (label ?? t("copyLink"))}
+      className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-line bg-card/80 text-gold active:scale-[0.98]"
+    >
+      {copied ? (
+        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M5 12l5 5L20 7" />
+        </svg>
+      ) : (
+        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M10 13a5 5 0 0 0 7.07 0l1.41-1.41a5 5 0 0 0-7.07-7.07L10 5.93" />
+          <path d="M14 11a5 5 0 0 0-7.07 0L5.5 12.41a5 5 0 0 0 7.07 7.07L14 18.07" />
+        </svg>
+      )}
+    </button>
+  );
+}
+
 export function ShareJoinLink({
   slug,
   path,

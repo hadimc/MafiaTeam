@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { unlockTimerAudio, useTimerSound } from "@/lib/timerAudio";
 
 function Clock({
   label,
@@ -11,6 +12,7 @@ function Clock({
 }) {
   const [left, setLeft] = useState(seconds);
   const [run, setRun] = useState(false);
+  useTimerSound(left, run);
 
   useEffect(() => {
     if (!run) return;
@@ -34,6 +36,7 @@ function Clock({
     <button
       type="button"
       onClick={() => {
+        unlockTimerAudio();
         if (left === 0) {
           setLeft(seconds);
           setRun(true);
@@ -46,7 +49,15 @@ function Clock({
         setLeft(seconds);
       }}
       className={`min-h-12 flex-1 rounded-2xl border px-3 font-mono text-lg tabular-nums ${
-        run ? "border-gold bg-gold/15 text-gold" : left === 0 ? "border-mafia/40 bg-mafia/10 text-mafia" : "border-line bg-card text-ink"
+        left === 0
+          ? "border-mafia/40 bg-mafia/10 text-mafia"
+          : run && left <= 3
+            ? "border-mafia/50 bg-mafia/15 text-mafia"
+            : run && left <= 10
+              ? "border-gold bg-gold/20 text-gold"
+              : run
+                ? "border-gold bg-gold/15 text-gold"
+                : "border-line bg-card text-ink"
       }`}
     >
       <span className="block text-[10px] font-sans uppercase tracking-[0.16em] text-muted">{label}</span>

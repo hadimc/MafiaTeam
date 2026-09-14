@@ -78,8 +78,8 @@ async function main() {
     );
   }
 
-  const byUsername = Object.fromEntries(createdUsers.map((user) => [user.username, user]));
-  const hadi = byUsername.hadi ?? createdUsers.find((user) => user.isAdmin) ?? createdUsers[0];
+  const admin = createdUsers.find((user) => user.isAdmin) ?? createdUsers[0];
+  const members = createdUsers.filter((user) => user.id !== admin.id);
   let scenario10Id = "";
   let scenario14Id = "";
 
@@ -117,20 +117,17 @@ async function main() {
     include: { roles: true, exitCards: true },
   });
 
-  const tenPlayerNames = [
-    "koorosh", "kamran", "peyman", "khatereh", "behrang", "babak", "nastaran", "arya", "sina",
-  ];
-  const tenPlayers = tenPlayerNames.map((username) => byUsername[username]).filter(Boolean);
-  if (tenPlayers.length === tenPlayerNames.length) {
+  const tenPlayers = members.slice(0, 9);
+  if (tenPlayers.length === 9) {
     await seedFinishedNight({
       slug: "friday-mafia-jul-10",
       title: "مافیای جمعه — ۱۰ ژوئیه",
       titleEn: "Friday Mafia — July 10",
       date: new Date("2026-07-10T21:00:00"),
-      location: "خانه هادی",
-      locationEn: "Hadi's place",
+      location: "باشگاه",
+      locationEn: "The clubhouse",
       scenario: scenario10,
-      narrator: hadi,
+      narrator: admin,
       players: tenPlayers,
       winner: "mafia",
       startedAt: new Date("2026-07-10T21:20:00"),
@@ -142,10 +139,10 @@ async function main() {
       title: "مافیای جمعه — ۷ اوت",
       titleEn: "Friday Mafia — August 7",
       date: new Date("2026-08-07T21:00:00"),
-      location: "خانه پیمان",
-      locationEn: "Peyman's place",
+      location: "باشگاه",
+      locationEn: "The clubhouse",
       scenario: scenario10,
-      narrator: hadi,
+      narrator: admin,
       players: [...tenPlayers].reverse(),
       winner: "citizen",
       startedAt: new Date("2026-08-07T21:15:00"),
@@ -159,26 +156,20 @@ async function main() {
       title: "مافیای جمعه — ۲۱ اوت",
       titleEn: "Friday Mafia — August 21",
       date: new Date("2026-08-21T21:00:00"),
-      location: "خانه هادی",
-      locationEn: "Hadi's place",
+      location: "باشگاه",
+      locationEn: "The clubhouse",
       status: "registration_open",
-      createdById: hadi.id,
+      createdById: admin.id,
       scenarioId: scenario14Id || scenario10Id,
-      narrators: { create: [{ userId: hadi.id }] },
+      narrators: { create: [{ userId: admin.id }] },
     },
   });
 
   await prisma.eventRegistration.create({
-    data: { eventId: event.id, userId: hadi.id, narratorVolunteer: true },
+    data: { eventId: event.id, userId: admin.id, narratorVolunteer: true },
   });
 
-  const playerUsernames = [
-    "koorosh", "kamran", "mahboobeh", "peyman", "khatereh", "behrang", "mandana",
-    "babak", "nastaran", "arya", "sina", "razi", "akbar",
-  ];
-  for (const username of playerUsernames) {
-    const user = byUsername[username];
-    if (!user) continue;
+  for (const user of members.slice(0, 13)) {
     await prisma.eventRegistration.create({
       data: { eventId: event.id, userId: user.id },
     });
@@ -197,7 +188,7 @@ async function main() {
   console.log(`Seeded ${club.users.length} club members from prisma/club.local.json`);
   console.log(`Seeded ${SCENARIO_PRESETS.length} scenarios (10–18 attendees)`);
   console.log(`Temp password: (see prisma/club.local.json)`);
-  console.log(`Admin: ${hadi.username}`);
+  console.log(`Admin: ${admin.username}`);
   console.log("Open: /events/friday-mafia-aug-21");
 }
 

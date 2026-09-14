@@ -6,6 +6,7 @@ import { Button, Panel } from "@/components/ui";
 import { NarratorNav } from "@/components/NarratorNav";
 import { defenseQualifiers, defenseThreshold } from "@/engine";
 import { readSnapshot } from "@/lib/scenario";
+import { unlockTimerAudio, useTimerSound } from "@/lib/timerAudio";
 import {
   drawExitCardAction,
   eliminatePlayerAction,
@@ -42,6 +43,7 @@ export function NarratorDay({ game }: { game: Game }) {
   const [picking, setPicking] = useState(false);
   const [color, setColor] = useState<string | null>(null);
   const [card, setCard] = useState<string | null>(null);
+  useTimerSound(seconds, running);
 
   const speaker = living[index] ?? living[0];
   const next = living[(index + 1) % Math.max(living.length, 1)];
@@ -115,7 +117,14 @@ export function NarratorDay({ game }: { game: Game }) {
       </Panel>
 
       <div className="grid grid-cols-3 gap-2">
-        <Button onClick={() => setRunning((v) => !v)}>{running ? t("pause") : t("start")}</Button>
+        <Button
+          onClick={() => {
+            unlockTimerAudio();
+            setRunning((v) => !v);
+          }}
+        >
+          {running ? t("pause") : t("start")}
+        </Button>
         <Button
           onClick={() => {
             setSeconds(duration);
@@ -148,6 +157,7 @@ export function NarratorDay({ game }: { game: Game }) {
                 variant="ghost"
                 className="min-h-11 text-sm"
                 onClick={() => {
+                  unlockTimerAudio();
                   setChallenge(true);
                   setPicking(false);
                   setSeconds(snapshot.configuration.challengeSeconds);

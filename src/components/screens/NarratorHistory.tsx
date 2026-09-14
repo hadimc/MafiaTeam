@@ -2,6 +2,7 @@
 
 import { useLang } from "@/lib/lang";
 import { Button, Panel } from "@/components/ui";
+import { useGameLive } from "@/lib/useGameLive";
 
 export function NarratorHistory({
   game,
@@ -12,6 +13,7 @@ export function NarratorHistory({
   };
 }) {
   const { t } = useLang();
+  useGameLive(game.id);
   return (
     <div className="flex flex-1 flex-col gap-4">
       <Button href={`/games/${game.id}/narrator`} variant="ghost" className="w-auto self-start min-h-10 px-3 text-sm">

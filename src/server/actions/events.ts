@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireAdmin, requireUser } from "@/lib/auth";
+import { parseConfig } from "@/engine";
 import { getEventBySlug, canManageEventScenario, isNarrator } from "@/lib/queries";
 import { MAX_NARRATORS } from "@/lib/roster";
 import { isRosterOpen, canReopenScenario } from "@/lib/stats";
@@ -13,6 +14,8 @@ import {
   playerCount,
   roleCreates,
 } from "@/lib/catalog";
+import { parseZodiacForm, withZodiacRoleCopy, zodiacConfigFields } from "@/lib/zodiac";
+import { peelScenarioLabel } from "@/lib/briefing";
 
 function slugify(input: string) {
   return input
@@ -26,6 +29,7 @@ function touchEvent(slug: string) {
   revalidatePath(`/events/${slug}`);
   revalidatePath(`/events/${slug}/players`);
   revalidatePath(`/events/${slug}/briefing`);
+  revalidatePath(`/events/${slug}/results`);
   revalidatePath("/dashboard");
 }
 
@@ -237,14 +241,20 @@ export async function finalizeScenarioAction(eventId: string, formData: FormData
   if (!base) return { error: "incomplete" };
 
   const qty = parseRoleQuantities(formData);
+  const zodiac = parseZodiacForm(formData);
+  const configuration = JSON.stringify({ ...defaultConfig(qty), ...zodiacConfigFields(zodiac) });
+  const roles = withZodiacRoleCopy(roleCreates(qty), zodiac);
   const players = playerCount(qty);
   const seated = event.registrations.length - event.narrators.length;
   if (players !== seated) return { error: "count", expected: seated, actual: players };
 
   const attendees = event.narrators.length + seated;
-  const nameFa = `${event.title} · ${base.name}`.slice(0, 90);
-  const nameEn = `${event.titleEn} · ${base.nameEn}`.slice(0, 90);
-  const uniqueNameEn = `${nameEn} · ${event.slug}`.slice(0, 90);
+  const tableFa =
+    peelScenarioLabel(base.name, event.slug, [event.title, event.titleEn]) || base.name;
+  const tableEn =
+    peelScenarioLabel(base.nameEn, event.slug, [event.titleEn, event.title]) || base.nameEn;
+  const nameFa = tableFa.slice(0, 90);
+  const uniqueNameEn = `${tableEn} · ${event.slug}`.slice(0, 90);
   const exitCards =
     base.exitCards.length > 0
       ? base.exitCards.map(({ key, name, nameEn, description, descriptionEn }) => ({
@@ -275,9 +285,9 @@ export async function finalizeScenarioAction(eventId: string, formData: FormData
           attendeeCount: attendees,
           narratorCount: event.narrators.length,
           supportedPlayerCount: players,
-          configuration: JSON.stringify(defaultConfig(qty)),
+          configuration,
           version: { increment: 1 },
-          roles: { create: roleCreates(qty) },
+          roles: { create: roles },
         },
       }),
       prisma.event.update({
@@ -295,9 +305,9 @@ export async function finalizeScenarioAction(eventId: string, formData: FormData
         attendeeCount: attendees,
         narratorCount: event.narrators.length,
         supportedPlayerCount: players,
-        configuration: JSON.stringify(defaultConfig(qty)),
+        configuration,
         active: false,
-        roles: { create: roleCreates(qty) },
+        roles: { create: roles },
         exitCards: { create: exitCards },
       },
     });
@@ -309,6 +319,46 @@ export async function finalizeScenarioAction(eventId: string, formData: FormData
       }),
     ]);
   }
+  touchEvent(event.slug);
+  return { ok: true as const };
+}
+
+export async function setZodiacRulesAction(eventId: string, formData: FormData) {
+  const user = await requireUser();
+  const event = await prisma.event.findUnique({
+    where: { id: eventId },
+    include: { narrators: true, scenario: { include: { roles: true } } },
+  });
+  if (!event || !canManageEventScenario(user, event)) return { error: "forbidden" };
+  if (event.status !== "scenario_finalized" || !event.scenario) return { error: "locked" };
+
+  const rules = parseZodiacForm(formData);
+  const configuration = JSON.stringify({
+    ...parseConfig(event.scenario.configuration),
+    ...zodiacConfigFields(rules),
+  });
+  const copy = withZodiacRoleCopy(
+    event.scenario.roles.map((role) => ({
+      key: role.key,
+      description: role.description,
+      descriptionEn: role.descriptionEn,
+    })),
+    rules,
+  );
+  await prisma.$transaction([
+    prisma.scenario.update({
+      where: { id: event.scenario.id },
+      data: { configuration, version: { increment: 1 } },
+    }),
+    ...copy
+      .filter((role) => role.key === "zodiac")
+      .map((role) =>
+        prisma.role.updateMany({
+          where: { scenarioId: event.scenario!.id, key: "zodiac" },
+          data: { description: role.description, descriptionEn: role.descriptionEn },
+        }),
+      ),
+  ]);
   touchEvent(event.slug);
   return { ok: true as const };
 }

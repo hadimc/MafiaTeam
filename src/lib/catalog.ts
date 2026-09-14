@@ -246,7 +246,11 @@ export function nightStepLabel(stepKey: string) {
   return CATALOG_BY_KEY[stepKey]?.nameEn ?? stepKey;
 }
 
-export function defaultConfig(qty: Record<string, number>) {
+export function defaultConfig(qty: Record<string, number>, zodiac?: {
+  zodiacMortality?: string;
+  zodiacShootNights?: string;
+  zodiacCursedRole?: string | null;
+}) {
   return {
     speakSeconds: 60,
     challengeSeconds: 30,
@@ -254,6 +258,9 @@ export function defaultConfig(qty: Record<string, number>) {
     challengesPerDay: 1,
     statusInquiries: 2,
     nightOrder: nightOrderFromQuantities(qty),
+    zodiacMortality: zodiac?.zodiacMortality ?? "immortal",
+    zodiacShootNights: zodiac?.zodiacShootNights ?? "even",
+    zodiacCursedRole: zodiac && "zodiacCursedRole" in zodiac ? zodiac.zodiacCursedRole : "watson",
   };
 }
 

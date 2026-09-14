@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui";
 import { useLang } from "@/lib/lang";
+import { randomBlueGreen } from "@/engine";
 
 const HOLD_MS = 800;
 
@@ -112,7 +113,7 @@ export function LotteryShow({
   onClose: () => void;
   onReveal: (color: "blue" | "green") => void;
 }) {
-  const [order] = useState<"blue" | "green">(() => (Math.random() < 0.5 ? "blue" : "green"));
+  const [order] = useState<"blue" | "green">(() => randomBlueGreen());
   const [locked, setLocked] = useState<"blue" | "green" | null>(null);
   const color = locked ?? order;
   const face =

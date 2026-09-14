@@ -25,6 +25,23 @@ export async function listEvents() {
   });
 }
 
+export async function getFinishedEventRecap(slug: string) {
+  return prisma.event.findUnique({
+    where: { slug },
+    include: {
+      scenario: { select: { name: true, nameEn: true } },
+      games: {
+        orderBy: { createdAt: "desc" as const },
+        take: 1,
+        include: {
+          players: { include: { user: true }, orderBy: { seatNumber: "asc" as const } },
+          actions: { where: { reversed: false }, orderBy: { createdAt: "asc" as const } },
+        },
+      },
+    },
+  });
+}
+
 export async function getEventBySlug(slug: string) {
   return prisma.event.findUnique({
     where: { slug },

@@ -25,6 +25,19 @@ test("displayScenarioName strips the uniqueness slug in English", () => {
   assert.equal(displayScenarioName(scenario, "friday-night", "fa"), "۱۰ نفره — پدرخوانده و جک");
 });
 
+test("displayScenarioName drops repeated event titles from cloned tables", () => {
+  const scenario = {
+    name: "۱۳ نفره — لکتر به‌جای ماتادور",
+    nameEn:
+      "Sept 13 - Game 2 · Sept 13 - Game 2 · Sept 13 - Game 2 · 13 attendees — Lecter for Matador · sept-13-game-2",
+  };
+  assert.equal(
+    displayScenarioName(scenario, "sept-13-game-2", "en", { titleEn: "Sept 13 - Game 2" }),
+    "13 attendees — Lecter for Matador",
+  );
+});
+
+
 test("briefingRoles keeps only positive quantities in catalog order", () => {
   const roles = briefingRoles([
     { key: "villager", quantity: 2 },
@@ -39,10 +52,10 @@ test("briefingRoles keeps only positive quantities in catalog order", () => {
 });
 
 test("admins can finalize a scenario without attending or narrating", () => {
-  const event = { narrators: [{ userId: "koorosh" }] };
-  assert.equal(canManageEventScenario({ id: "hadi", isAdmin: true }, event), true);
-  assert.equal(canManageEventScenario({ id: "hadi", isAdmin: false }, event), false);
-  assert.equal(canManageEventScenario({ id: "koorosh", isAdmin: false }, event), true);
+  const event = { narrators: [{ userId: "alex" }] };
+  assert.equal(canManageEventScenario({ id: "admin", isAdmin: true }, event), true);
+  assert.equal(canManageEventScenario({ id: "admin", isAdmin: false }, event), false);
+  assert.equal(canManageEventScenario({ id: "alex", isAdmin: false }, event), true);
 });
 
 test("lock-in briefing uses the revised table, not a player-count preset", () => {

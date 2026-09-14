@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { appliedNightOutcome, lastNightReport, nightLine, nightTasks, resolveNight } from "./stages";
+import {
+  appliedNightOutcome,
+  beautifulMindDeckState,
+  beautifulMindHasGuess,
+  lastNightReport,
+  nightLine,
+  nightTasks,
+  resolveNight,
+  townLikeOrder,
+} from "./stages";
 
 type P = {
   id: string;
@@ -325,6 +334,28 @@ test("Zodiac shot is dropped once Zodiac is out", () => {
   assert.equal(result.notes.some((note) => /zodiac is out/i.test(note)), true);
 });
 
+test("intro night town thumbs-up includes Mayor between Constantine and Gunner", () => {
+  const order = townLikeOrder([
+    { id: "v", roleKey: "villager", seatNumber: 7 },
+    { id: "m", roleKey: "mayor", seatNumber: 6 },
+    { id: "g", roleKey: "gunner", seatNumber: 5 },
+    { id: "c", roleKey: "constantine", seatNumber: 4 },
+    { id: "w", roleKey: "watson", seatNumber: 1 },
+  ]);
+  assert.deepEqual(
+    order.map((player) => player.roleKey),
+    ["watson", "constantine", "mayor", "gunner", "villager"],
+  );
+});
+
+test("intro night still shows the Citizen step when Mayor is the only town role in play", () => {
+  const line = (key: string) => (key === "mayor" ? ("record" as const) : ("skip" as const));
+  assert.equal(
+    nightTasks({ kind: "night", n: 0 }, false, line).some((task) => task.key === "town"),
+    true,
+  );
+});
+
 test("Zodiac task appears on intro night and even nights only", () => {
   const line = (key: string) => (key === "zodiac" ? ("record" as const) : ("skip" as const));
   const keys = (n: number) => nightTasks({ kind: "night", n }, false, line).map((task) => task.key);
@@ -332,6 +363,112 @@ test("Zodiac task appears on intro night and even nights only", () => {
   assert.equal(keys(1).includes("zodiac"), false);
   assert.equal(keys(2).includes("zodiac"), true);
   assert.equal(keys(3).includes("zodiac"), false);
+});
+
+test("Zodiac can be set to shoot on odd nights or every night", () => {
+  const line = (key: string) => (key === "zodiac" ? ("record" as const) : ("skip" as const));
+  const keys = (n: number, shoot: "odd" | "all") =>
+    nightTasks({ kind: "night", n }, false, line, null, shoot).map((task) => task.key);
+  assert.equal(keys(0, "odd").includes("zodiac"), true);
+  assert.equal(keys(1, "odd").includes("zodiac"), true);
+  assert.equal(keys(2, "odd").includes("zodiac"), false);
+  assert.equal(keys(1, "all").includes("zodiac"), true);
+  assert.equal(keys(2, "all").includes("zodiac"), true);
+});
+
+test("Zodiac with no shield can be removed by the mafia shot", () => {
+  const result = resolveNight(
+    [act("mafiaShot", zodiac.id, 2)],
+    [zodiac, watson],
+    2,
+    { mortality: "no_shield", shootNights: "even", cursedRole: "watson" },
+  );
+  assert.deepEqual(result.leaveIds, [zodiac.id]);
+});
+
+test("Zodiac one-shield absorbs the first night kill, then can leave", () => {
+  const first = resolveNight(
+    [act("mafiaShot", zodiac.id, 2)],
+    [zodiac, watson],
+    2,
+    { mortality: "one_shield", shootNights: "even", cursedRole: "watson" },
+  );
+  assert.deepEqual(first.leaveIds, []);
+  assert.deepEqual(first.shieldBreakIds, [zodiac.id]);
+  const second = resolveNight(
+    [act("mafiaShot", zodiac.id, 2), { actionType: "shieldBreak", dayNumber: 2, targetPlayerId: zodiac.id }, act("mafiaShot", zodiac.id, 4)],
+    [zodiac, watson],
+    4,
+    { mortality: "one_shield", shootNights: "even", cursedRole: "watson" },
+  );
+  assert.deepEqual(second.leaveIds, [zodiac.id]);
+});
+
+test("Leon can remove a no-shield Zodiac", () => {
+  const result = resolveNight(
+    [act("leon", zodiac.id, 2)],
+    [leon, zodiac],
+    2,
+    { mortality: "no_shield", shootNights: "even", cursedRole: "watson" },
+  );
+  assert.deepEqual(result.leaveIds, [zodiac.id]);
+});
+
+test("Zodiac cursed role none: shooting Watson removes Watson", () => {
+  const result = resolveNight(
+    [act("zodiac", watson.id, 2)],
+    [zodiac, watson],
+    2,
+    { mortality: "immortal", shootNights: "even", cursedRole: null },
+  );
+  assert.deepEqual(result.leaveIds, [watson.id]);
+  assert.equal(result.notes.some((note) => /misfired/i.test(note)), false);
+});
+
+test("Zodiac cursed role can be any dealt role", () => {
+  const result = resolveNight(
+    [act("zodiac", lecter.id, 2)],
+    [zodiac, lecter],
+    2,
+    { mortality: "immortal", shootNights: "even", cursedRole: "lecter" },
+  );
+  assert.deepEqual(result.leaveIds, [zodiac.id]);
+  assert.equal(result.notes.some((note) => /misfired/i.test(note)), true);
+});
+
+test("Zodiac shooting a shielded Godfather drops the shield and they stay", () => {
+  const godfather = player("g", "godfather", "mafia");
+  const result = resolveNight([act("zodiac", godfather.id, 2)], [zodiac, godfather], 2);
+  assert.deepEqual(result.leaveIds, []);
+  assert.deepEqual(result.shieldBreakIds, [godfather.id]);
+  assert.equal(result.notes.some((note) => /shield/i.test(note)), true);
+});
+
+test("Zodiac shooting Leon drops the vest and Leon stays", () => {
+  const result = resolveNight([act("zodiac", leon.id, 2)], [zodiac, leon], 2);
+  assert.deepEqual(result.leaveIds, []);
+  assert.deepEqual(result.shieldBreakIds, [leon.id]);
+});
+
+test("a second night shot after the shield drops removes them", () => {
+  const result = resolveNight(
+    [act("mafiaShot", leon.id, 2), act("zodiac", leon.id, 2)],
+    [zodiac, leon, watson],
+    2,
+  );
+  assert.deepEqual(result.leaveIds, [leon.id]);
+  assert.deepEqual(result.shieldBreakIds, [leon.id]);
+});
+
+test("Leon then Zodiac on Godfather: shield drops, then Godfather leaves", () => {
+  const godfather = player("g", "godfather", "mafia");
+  const result = resolveNight(
+    [act("leon", godfather.id, 2), act("zodiac", godfather.id, 2)],
+    [zodiac, leon, godfather],
+    2,
+  );
+  assert.deepEqual(result.leaveIds, [godfather.id]);
+  assert.deepEqual(result.shieldBreakIds, [godfather.id]);
 });
 
 test("lastNightReport surfaces which Mafia player Kane's coupon marked", () => {
@@ -521,5 +658,27 @@ test("Handcuffs on Kane last night prevents the delayed leave", () => {
     2,
   );
   assert.deepEqual(result.leaveIds, []);
+});
+
+test("Beautiful Mind has a guess while Jack is alive", () => {
+  assert.equal(beautifulMindHasGuess([jack, villager], []), true);
+});
+
+test("Beautiful Mind has no guess when Jack and the curse are out", () => {
+  const deadJack = { ...jack, alive: false };
+  assert.equal(beautifulMindHasGuess([deadJack, villager], [act("jack", villager.id)]), true);
+  assert.equal(beautifulMindHasGuess([deadJack, { ...villager, alive: false }], [act("jack", villager.id)]), false);
+});
+
+test("Beautiful Mind deck state treats a discard as removed, not drawn", () => {
+  const cards = [{ id: "c1", key: "mind", used: true }];
+  assert.equal(
+    beautifulMindDeckState(cards, [{ actionType: "discard_exit_card", metadata: JSON.stringify({ key: "mind", id: "c1" }) }]),
+    "removed",
+  );
+  assert.equal(
+    beautifulMindDeckState(cards, [{ actionType: "exit_card", metadata: JSON.stringify({ key: "mind", id: "c1" }) }]),
+    "drawn",
+  );
 });
 

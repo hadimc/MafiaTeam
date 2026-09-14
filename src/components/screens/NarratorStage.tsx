@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import Link from "next/link";
 import { useLang, enName } from "@/lib/lang";
+import { useGameLive } from "@/lib/useGameLive";
 import { Button, Panel, SeatAvatar } from "@/components/ui";
 import { factionLabel } from "@/lib/stats";
 import { TimerBar } from "@/components/TimerBar";
@@ -26,6 +27,8 @@ import {
   persistStage,
   prevStage,
   publicPlayerIds,
+  beautifulMindDeckState,
+  beautifulMindHasGuess,
   resolveNight,
   roleDisabledOnNight,
   scenarioRoleKeys,
@@ -43,8 +46,10 @@ import {
   type NightLine,
 } from "@/lib/stages";
 import { readSnapshot, type SnapshotExitCard } from "@/lib/scenario";
+import { zodiacDescription, zodiacRulesFromSnapshot } from "@/lib/zodiac";
 import {
   closeGameAction,
+  discardBeautifulMindAction,
   drawExitCardAction,
   eliminatePlayerAction,
   endGameAction,
@@ -83,7 +88,7 @@ type Game = {
   status: string;
   winningFaction: string | null;
   scenarioSnapshot: string;
-  event: { title: string; titleEn: string; slug: string; showHints: boolean };
+  event: { title: string; titleEn: string; slug: string; showHints: boolean; narrators?: { userId: string }[] };
   players: Player[];
   votes: { voteType: string; dayNumber: number; targetPlayerId: string; count: number }[];
   draws: { playerId: string; cardName: string; cardNameEn: string }[];
@@ -121,6 +126,7 @@ function handcuffsDrawnToday(actions: Game["actions"], dayNumber: number) {
 
 export function NarratorStage({ game }: { game: Game }) {
   const { t } = useLang();
+  useGameLive(game.id);
   const [open, setOpen] = useState<string | null>(null);
   const [lotteryOpen, setLotteryOpen] = useState(false);
   const [exitCard, setExitCard] = useState<SnapshotExitCard | null>(null);
@@ -137,6 +143,7 @@ export function NarratorStage({ game }: { game: Game }) {
   const living = game.players.filter((player) => player.alive);
   const dead = game.players.filter((player) => !player.alive);
   const snapshot = readSnapshot(game.scenarioSnapshot);
+  const zodiacRules = zodiacRulesFromSnapshot(game.scenarioSnapshot);
   const remainingCards = snapshot.exitCards.filter((item) => !item.used);
   const scenarioKeys = scenarioRoleKeys(snapshot.roles);
   const publicIds = publicPlayerIds(game.actions);
@@ -155,6 +162,7 @@ export function NarratorStage({ game }: { game: Game }) {
           dead.length > 0,
           lineFor,
           game.actions.find((action) => action.actionType === "faceChange")?.dayNumber ?? null,
+          zodiacRules.shootNights,
         );
   const name = (player?: Player) => (!player ? "—" : enName(player.user));
   const cuffedId = handcuffsTarget(game.actions, game.currentDay);
@@ -199,6 +207,9 @@ export function NarratorStage({ game }: { game: Game }) {
         </div>
         <h1 className="display text-3xl font-semibold">{stageTitle(stage)}</h1>
         <p className="text-sm text-muted">{stageSubtitle(stage)}</p>
+        <p className="text-[11px] uppercase tracking-[0.22em] text-gold">
+          {(game.event.narrators?.length ?? 0) > 1 ? t("liveNarrators") : t("liveSync")}
+        </p>
         <div className="grid grid-cols-2 gap-2">
           <Button onClick={() => go("prev")} variant="ghost" disabled={!back}>
             {t("previous")}
@@ -380,6 +391,51 @@ export function NarratorStage({ game }: { game: Game }) {
   );
 }
 
+function BeautifulMindRemove({ game }: { game: Game }) {
+  const snapshot = readSnapshot(game.scenarioSnapshot);
+  const state = beautifulMindDeckState(snapshot.exitCards, game.actions);
+  if (state === "absent" || state === "drawn") return null;
+  const useful = beautifulMindHasGuess(game.players, game.actions);
+
+  return (
+    <div className="space-y-2">
+      {state === "in_deck" ? (
+        <>
+          <Hint>
+            Remove Beautiful Mind when it cannot be used — for example Jack and the curse are already
+            out.
+          </Hint>
+          <p dir="rtl" lang="fa" className="farsi text-xs text-muted">
+            اگر جک و طلسم دیگر در بازی نیستند، ذهن زیبا را از دسته خارج کنید.
+          </p>
+          {!useful ? (
+            <p className="text-xs text-gold">No valid guess left (Jack, curse, and Nostradamus are out).</p>
+          ) : null}
+          <Button variant="ghost" className="flex-col py-2" onClick={() => void discardBeautifulMindAction(game.id)}>
+            Remove Beautiful Mind
+            <span dir="rtl" lang="fa" className="farsi mt-0.5 block text-xs font-normal">
+              حذف ذهن زیبا
+            </span>
+          </Button>
+        </>
+      ) : (
+        <>
+          <p className="text-sm font-semibold">Beautiful Mind is out of the deck</p>
+          <p dir="rtl" lang="fa" className="farsi text-sm text-gold">
+            ذهن زیبا از دسته خارج شد
+          </p>
+          <Button variant="ghost" className="flex-col py-2" onClick={() => void discardBeautifulMindAction(game.id)}>
+            Put Beautiful Mind back
+            <span dir="rtl" lang="fa" className="farsi mt-0.5 block text-xs font-normal">
+              برگرداندن ذهن زیبا
+            </span>
+          </Button>
+        </>
+      )}
+    </div>
+  );
+}
+
 function TaskBody({
   task,
   stage,
@@ -421,7 +477,7 @@ function TaskBody({
   const curses = jackCurseRound(game.actions, living, game.currentDay);
   const byId = new Map(game.players.map((player) => [player.id, player]));
   const jackDisabled = disableForRole(game, "jack", name);
-  const night = lastNightReport(game.actions, game.currentDay, game.players);
+  const night = lastNightReport(game.actions, game.currentDay, game.players, zodiacRulesFromSnapshot(game.scenarioSnapshot));
   const inquiriesUsed = game.actions.filter((action) => action.actionType === "inquiry").length;
   const mafiaLikes = mafiaLikeOrder(living);
   const townLikes = townLikeOrder(living);
@@ -571,49 +627,46 @@ function TaskBody({
       ) : null}
 
       {task.key === "exitCard" ? (
-        remainingCards.length === 0 && !handcuffsDrawnToday(game.actions, game.currentDay) ? (
-          <p className="text-xs text-muted">No exit cards left in the deck.</p>
-        ) : (
-          <>
-            {remainingCards.length === 0 ? (
-              <p className="text-xs text-muted">No exit cards left in the deck.</p>
-            ) : (
-              <div className="grid grid-cols-5 gap-2">
-                {remainingCards.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className="playing-card card-pattern min-h-16 rounded-xl text-sm font-semibold text-gold"
-                    onClick={() => onExitCard(item)}
-                    aria-label={item.nameEn}
-                  />
-                ))}
-              </div>
-            )}
-            {handcuffsDrawnToday(game.actions, game.currentDay) ? (
-              <div className="space-y-2">
-                <p className="text-sm font-semibold">Handcuffs — pick any living player</p>
-                <p dir="rtl" lang="fa" className="farsi text-sm text-gold">
-                  دستبند — یک بازیکن زنده را انتخاب کنید
-                </p>
-                <Hint>
-                  Citizen, Mafia, or independent — including Matador. They cannot use their night ability
-                  tonight.
-                </Hint>
-                <PickList
-                  label="Disable tonight — tap another name to change"
-                  players={living}
-                  name={name}
-                  showRole
-                  selectedId={handcuffsTarget(game.actions, game.currentDay)}
-                  onPick={(player) =>
-                    void recordStageAction(game.id, "handcuffs", `Handcuffs → ${name(player)}`, player.id)
-                  }
+        <>
+          {remainingCards.length === 0 ? (
+            <p className="text-xs text-muted">No exit cards left in the deck.</p>
+          ) : (
+            <div className="grid grid-cols-5 gap-2">
+              {remainingCards.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className="playing-card card-pattern min-h-16 rounded-xl text-sm font-semibold text-gold"
+                  onClick={() => onExitCard(item)}
+                  aria-label={item.nameEn}
                 />
-              </div>
-            ) : null}
-          </>
-        )
+              ))}
+            </div>
+          )}
+          <BeautifulMindRemove game={game} />
+          {handcuffsDrawnToday(game.actions, game.currentDay) ? (
+            <div className="space-y-2">
+              <p className="text-sm font-semibold">Handcuffs — pick any living player</p>
+              <p dir="rtl" lang="fa" className="farsi text-sm text-gold">
+                دستبند — یک بازیکن زنده را انتخاب کنید
+              </p>
+              <Hint>
+                Citizen, Mafia, or independent — including Matador. They cannot use their night ability
+                tonight.
+              </Hint>
+              <PickList
+                label="Disable tonight — tap another name to change"
+                players={living}
+                name={name}
+                showRole
+                selectedId={handcuffsTarget(game.actions, game.currentDay)}
+                onPick={(player) =>
+                  void recordStageAction(game.id, "handcuffs", `Handcuffs → ${name(player)}`, player.id)
+                }
+              />
+            </div>
+          ) : null}
+        </>
       ) : null}
 
       {task.key === "removePlayers" ? (
@@ -708,7 +761,12 @@ function NightPreview({
   name: (player?: Player) => string;
   byId: Map<string, Player>;
 }) {
-  const preview = resolveNight(game.actions, game.players, game.currentDay);
+  const preview = resolveNight(
+    game.actions,
+    game.players,
+    game.currentDay,
+    zodiacRulesFromSnapshot(game.scenarioSnapshot),
+  );
   const picks = tonightPicks(game.actions, game.currentDay);
   const gunnerTonight = tonightAction(game.actions, game.currentDay, "gunner");
   const recorded = NIGHT_PICK_LABELS.flatMap((item) => {
@@ -923,6 +981,7 @@ function ZodiacShot({
   name: (player?: Player) => string;
   introNight: boolean;
 }) {
+  const rules = zodiacRulesFromSnapshot(game.scenarioSnapshot);
   const line = nightLine(
     "zodiac",
     scenarioRoleKeys(readSnapshot(game.scenarioSnapshot).roles),
@@ -932,11 +991,12 @@ function ZodiacShot({
   const zodiac = living.find((player) => player.roleKey === "zodiac");
   const target = tonightTarget(game.actions, game.currentDay, "zodiac");
   const blocked = disableForRole(game, "zodiac", name);
-  const preview = resolveNight(game.actions, game.players, game.currentDay);
+  const preview = resolveNight(game.actions, game.players, game.currentDay, rules);
   const notes = preview.notes.filter((note) => /zodiac/i.test(note));
   return (
     <>
       <AbilityHeader label="Zodiac" holder={zodiac} name={name} />
+      <Hint className="text-xs">{zodiacDescription(rules, "en")}</Hint>
       {introNight ? (
         line === "record" && zodiac ? (
           <LikeOrder label="Thumbs-up" players={[zodiac]} name={name} />
@@ -1235,7 +1295,12 @@ function MafiaNight({
   const sixthAction = tonightAction(game.actions, game.currentDay, "sixthSense");
   const sixthTarget = sixthAction?.targetPlayerId ?? null;
   const sixthGuess = sixthSenseGuess(sixthAction);
-  const preview = resolveNight(game.actions, game.players, game.currentDay);
+  const preview = resolveNight(
+    game.actions,
+    game.players,
+    game.currentDay,
+    zodiacRulesFromSnapshot(game.scenarioSnapshot),
+  );
   const saulNotes = preview.notes.filter((note) => /saul|purchase/i.test(note));
   const options = [
     ...(canShot ? [{ key: "mafiaShot" as const, label: "Shot" }] : []),
@@ -1449,7 +1514,12 @@ function TownNight({
   const detective = living.find((player) => player.roleKey === "detective");
   const detectiveLine = lineFor("detective");
   const leonTarget = tonightTarget(game.actions, game.currentDay, "leon");
-  const preview = resolveNight(game.actions, game.players, game.currentDay);
+  const preview = resolveNight(
+    game.actions,
+    game.players,
+    game.currentDay,
+    zodiacRulesFromSnapshot(game.scenarioSnapshot),
+  );
   const kaneNotes = preview.notes.filter((note) => /kane/i.test(note));
   const leonNotes = preview.notes.filter((note) => /leon|citizen hit|lecter|shield/i.test(note));
   const leonLine = lineFor("leon");

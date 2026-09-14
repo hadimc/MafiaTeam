@@ -12,3 +12,4 @@ prisma/club.local.json
 .vercel
 .DS_Store
 agent-transcripts
+.tmp-repro

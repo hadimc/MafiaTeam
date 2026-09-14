@@ -3,6 +3,8 @@
 import { refresh } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
+import { gameSyncStamp } from "@/lib/gameSync";
+import { isNarrator } from "@/lib/queries";
 
 export async function pullEventAction(eventId: string, seen: string) {
   await requireUser();
@@ -30,6 +32,51 @@ export async function pullEventAction(eventId: string, seen: string) {
     event.games[0]?.status ?? "",
     String(event.games[0]?._count.players ?? 0),
   ].join("|");
+  if (seen && stamp !== seen) refresh();
+  return stamp;
+}
+
+export async function pullGameAction(gameId: string, seen: string) {
+  const user = await requireUser();
+  const game = await prisma.game.findUnique({
+    where: { id: gameId },
+    select: {
+      status: true,
+      currentDay: true,
+      currentPhase: true,
+      nightStep: true,
+      speakerIndex: true,
+      winningFaction: true,
+      scenarioSnapshot: true,
+      event: { select: { narrators: { select: { userId: true } } } },
+      players: { select: { id: true, alive: true, roleKey: true } },
+      actions: {
+        orderBy: { id: "asc" },
+        select: {
+          id: true,
+          reversed: true,
+          actionType: true,
+          targetPlayerId: true,
+          dayNumber: true,
+          metadata: true,
+        },
+      },
+      votes: {
+        select: {
+          id: true,
+          count: true,
+          targetPlayerId: true,
+          voteType: true,
+          dayNumber: true,
+        },
+      },
+      draws: { select: { id: true } },
+    },
+  });
+  if (!game) return seen;
+  if (!user.isAdmin && !isNarrator(user, game.event)) return seen;
+
+  const stamp = gameSyncStamp(game);
   if (seen && stamp !== seen) refresh();
   return stamp;
 }
