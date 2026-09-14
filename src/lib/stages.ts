@@ -873,6 +873,8 @@ export function resolveNight(
       if (zodiacRules.cursedRole && target.roleKey === zodiacRules.cursedRole) {
         leave.add(zodiacPlayer.id);
         notes.push("Zodiac misfired on the cursed role. The shot fails and Zodiac leaves instead.");
+      } else if (watsonSave === target.id) {
+        notes.push("Watson saved the Zodiac target. They stay.");
       } else if (!leave.has(target.id) && nightShieldUp(target)) {
         shieldBreakIds.push(target.id);
         notes.push("Zodiac’s shot hit the shield. That player stays.");

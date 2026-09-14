@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { NightLine } from "./stages";
-import { lastCompletedTonightPick, latestNewCompletedType, nextNightFocus } from "./nightFocus";
+import { faceOffCardDrawn, lastCompletedTonightPick, latestNewCompletedType, nextNightFocus, openingDayFocus } from "./nightFocus";
 
 function line(map: Record<string, NightLine> = {}) {
   return (role: string): NightLine => map[role] ?? "skip";
@@ -35,9 +35,20 @@ test("after Matador, open Citizen on Dr. Watson", () => {
   assert.deepEqual(next, { task: "town", step: "watson" });
 });
 
-test("after a cover Lecter, skip the dead role and go to Watson", () => {
+test("after a cover Lecter, stay on Lecter so the narrator can still say the line", () => {
   const next = nextNightFocus("mafiaShot", nightTasks, line({ ...town, lecter: "cover" }));
-  assert.deepEqual(next, { task: "town", step: "watson" });
+  assert.deepEqual(next, { task: "mafia", step: "lecter" });
+});
+
+test("a dead town role still gets a wake stop so the line is said", () => {
+  assert.deepEqual(nextNightFocus("mafiaShot", nightTasks, line({ watson: "cover", leon: "record" })), {
+    task: "town",
+    step: "watson",
+  });
+  assert.deepEqual(nextNightFocus("watson", nightTasks, line({ watson: "record", leon: "cover", kane: "record" })), {
+    task: "town",
+    step: "leon",
+  });
 });
 
 test("sixth sense and purchase advance the same way as the mafia shot", () => {
@@ -86,6 +97,44 @@ test("with no pick yet, start on the first night task", () => {
     task: "mafia",
     step: "mafia",
   });
+});
+
+test("next day opens at the top of the actions, which is night briefing when present", () => {
+  assert.deepEqual(openingDayFocus(["nightBrief", "inquiry", "speak"]), {
+    task: "nightBrief",
+    step: "nightBrief",
+  });
+  assert.deepEqual(openingDayFocus(["speak"]), { task: "speak", step: "speak" });
+  assert.deepEqual(openingDayFocus([]), null);
+});
+
+test("Face-off stays in the list but auto-next skips it unless the exit card was drawn", () => {
+  const tasks = ["faceChange", "jack", "mafia", "town", "nightEnd"];
+  const lines = line({ jack: "record", ...town });
+  assert.deepEqual(nextNightFocus(null, tasks, lines), { task: "jack", step: "jack" });
+  assert.deepEqual(nextNightFocus(null, tasks, lines, { faceOffDrawn: false }), { task: "jack", step: "jack" });
+  assert.deepEqual(nextNightFocus(null, tasks, lines, { faceOffDrawn: true }), {
+    task: "faceChange",
+    step: "faceChange",
+  });
+});
+
+test("after Face-off, continue to Jack even when Face-off remains in the list", () => {
+  assert.deepEqual(
+    nextNightFocus("faceChange", ["faceChange", "jack", "mafia", "town", "nightEnd"], line({ jack: "record", ...town })),
+    { task: "jack", step: "jack" },
+  );
+});
+
+test("Face-off counts as drawn only from an exit card with key face", () => {
+  assert.equal(
+    faceOffCardDrawn([{ id: "c", actionType: "exit_card", dayNumber: 1, metadata: JSON.stringify({ key: "handcuffs" }) }]),
+    false,
+  );
+  assert.equal(
+    faceOffCardDrawn([{ id: "f", actionType: "exit_card", dayNumber: 1, metadata: JSON.stringify({ key: "face", id: "card-1" }) }]),
+    true,
+  );
 });
 
 test("last completed pick is the latest tonight target, ignoring an unfinished sixth sense", () => {

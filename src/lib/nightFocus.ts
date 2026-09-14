@@ -39,10 +39,11 @@ type FocusStep = {
   step: string;
   types: string[];
   role?: string;
+  auto?: "faceOffDrawn";
 };
 
 const NIGHT_FOCUS_STEPS: FocusStep[] = [
-  { task: "faceChange", step: "faceChange", types: ["faceChange"] },
+  { task: "faceChange", step: "faceChange", types: ["faceChange"], auto: "faceOffDrawn" },
   { task: "nostradamus", step: "nostradamus", types: ["nostradamus"], role: "nostradamus" },
   { task: "jack", step: "jack", types: ["jack"], role: "jack" },
   { task: "zodiac", step: "zodiac", types: ["zodiac"], role: "zodiac" },
@@ -58,10 +59,20 @@ const NIGHT_FOCUS_STEPS: FocusStep[] = [
   { task: "nightEnd", step: "nightEnd", types: [] },
 ];
 
-function stepAvailable(step: FocusStep, tasks: Set<string>, lineFor: (role: string) => NightLine) {
+export type NightFocusOptions = {
+  faceOffDrawn?: boolean;
+};
+
+function stepAvailable(
+  step: FocusStep,
+  tasks: Set<string>,
+  lineFor: (role: string) => NightLine,
+  options?: NightFocusOptions,
+) {
   if (!tasks.has(step.task)) return false;
+  if (step.auto === "faceOffDrawn" && !options?.faceOffDrawn) return false;
   if (!step.role) return true;
-  return lineFor(step.role) === "record";
+  return lineFor(step.role) !== "skip";
 }
 
 /** Where the narrator should look next after the last completed night pick (or at the start of the night). */
@@ -69,16 +80,36 @@ export function nextNightFocus(
   lastType: string | null,
   tasks: string[],
   lineFor: (role: string) => NightLine,
+  options?: NightFocusOptions,
 ): NightFocus | null {
   const available = new Set(tasks);
   const start = lastType == null ? -1 : NIGHT_FOCUS_STEPS.findIndex((step) => step.types.includes(lastType));
   if (lastType != null && start < 0) return null;
   for (let i = start + 1; i < NIGHT_FOCUS_STEPS.length; i++) {
     const step = NIGHT_FOCUS_STEPS[i];
-    if (!stepAvailable(step, available, lineFor)) continue;
+    if (!stepAvailable(step, available, lineFor, options)) continue;
     return { task: step.task, step: step.step };
   }
   return null;
+}
+
+/** First day accordion to open after Next — Night briefing when that step is in the list. */
+export function openingDayFocus(tasks: string[]): NightFocus | null {
+  const first = tasks[0];
+  if (!first) return null;
+  return { task: first, step: first };
+}
+
+export function faceOffCardDrawn(actions: NightFocusAction[]) {
+  return actions.some((action) => {
+    if (action.reversed) return false;
+    if (action.actionType !== "exit_card") return false;
+    try {
+      return (JSON.parse(action.metadata || "{}") as { key?: string }).key === "face";
+    } catch {
+      return false;
+    }
+  });
 }
 
 function isCompletedTonightPick(action: NightFocusAction, dayNumber: number) {
