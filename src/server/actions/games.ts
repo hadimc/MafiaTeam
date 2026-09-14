@@ -8,6 +8,7 @@ import {
   assignRoles,
   canTransition,
   parseConfig,
+  randomBlueGreen,
   type Faction,
   type Phase,
   type RoleDef,
@@ -16,6 +17,7 @@ import { CATALOG_BY_KEY, nightStepLabel } from "@/lib/catalog";
 import { canManageEventScenario, getGameForNarrator, isNarrator, readSnapshot, snapshotFromScenario } from "@/lib/queries";
 import {
   activeJackCurse,
+  beautifulMindDeckState,
   gunnerActiveHolders,
   gunnerAmmo,
   jackCurseRound,
@@ -30,6 +32,7 @@ import {
   roleDisabledOnNight,
   stageFromGame,
 } from "@/lib/stages";
+import { zodiacRulesFromSnapshot, zodiacShootsOnNight } from "@/lib/zodiac";
 
 async function narratorGame(gameId: string) {
   const user = await requireUser();
@@ -47,6 +50,7 @@ function revalidateGame(gameId: string, slug: string) {
   revalidatePath(`/events/${slug}`);
   revalidatePath(`/events/${slug}/players`);
   revalidatePath(`/events/${slug}/briefing`);
+  revalidatePath(`/events/${slug}/results`);
   revalidatePath("/dashboard");
   revalidatePath("/past");
   revalidatePath("/admin/events");
@@ -259,7 +263,12 @@ async function undoNightResolution(gameId: string, nightNumber: number) {
 async function applyNightResolution(gameId: string, nightNumber: number) {
   await undoNightResolution(gameId, nightNumber);
   const { user, game } = await narratorGame(gameId);
-  const result = resolveNight(game.actions, game.players, nightNumber);
+  const result = resolveNight(
+    game.actions,
+    game.players,
+    nightNumber,
+    zodiacRulesFromSnapshot(game.scenarioSnapshot),
+  );
   const meta = JSON.stringify({ via: "night" });
   let jackOut: { jackName: string; cursedName: string } | undefined;
 
@@ -399,7 +408,8 @@ export async function recordStageAction(
     if (target && target.faction === "mafia") return { error: "mafia" };
   }
   if (actionType === "zodiac" && targetPlayerId) {
-    if (game.currentDay < 2 || game.currentDay % 2 !== 0) return { error: "not_zodiac_night" };
+    const rules = zodiacRulesFromSnapshot(game.scenarioSnapshot);
+    if (!zodiacShootsOnNight(game.currentDay, rules.shootNights)) return { error: "not_zodiac_night" };
     const zodiac = game.players.find((player) => player.roleKey === "zodiac");
     if (zodiac && targetPlayerId === zodiac.id) return { error: "self" };
   }
@@ -761,6 +771,51 @@ export async function undoLastInquiryAction(gameId: string) {
   revalidateGame(gameId, game.event.slug);
 }
 
+export async function discardBeautifulMindAction(gameId: string) {
+  const { user, game } = await narratorGame(gameId);
+  const snapshot = readSnapshot(game.scenarioSnapshot);
+  const card = snapshot.exitCards.find((item) => item.key === "mind");
+  if (!card) return { error: "empty" as const };
+
+  const state = beautifulMindDeckState(snapshot.exitCards, game.actions);
+  if (state === "drawn") return { error: "drawn" as const };
+
+  if (state === "removed") {
+    card.used = false;
+    await prisma.$transaction([
+      prisma.game.update({
+        where: { id: gameId },
+        data: { scenarioSnapshot: JSON.stringify(snapshot) },
+      }),
+      prisma.gameAction.updateMany({
+        where: { gameId, actionType: "discard_exit_card", reversed: false },
+        data: { reversed: true },
+      }),
+    ]);
+    revalidateGame(gameId, game.event.slug);
+    return { card, restored: true as const };
+  }
+
+  card.used = true;
+  await prisma.game.update({
+    where: { id: gameId },
+    data: { scenarioSnapshot: JSON.stringify(snapshot) },
+  });
+  await log(
+    gameId,
+    game.currentDay,
+    game.currentPhase,
+    user.id,
+    "discard_exit_card",
+    "کارت ذهن زیبا از دسته خارج شد",
+    "Beautiful Mind removed from the deck",
+    undefined,
+    JSON.stringify({ key: card.key, id: card.id }),
+  );
+  revalidateGame(gameId, game.event.slug);
+  return { card, restored: false as const };
+}
+
 export async function drawExitCardAction(gameId: string, cardId: string) {
   const { user, game } = await narratorGame(gameId);
   const snapshot = readSnapshot(game.scenarioSnapshot);
@@ -803,7 +858,7 @@ export async function recordLotteryAction(gameId: string, color: "blue" | "green
 }
 
 export async function randomizeTieAction(gameId: string) {
-  return recordLotteryAction(gameId, Math.random() < 0.5 ? "blue" : "green");
+  return recordLotteryAction(gameId, randomBlueGreen());
 }
 
 export async function recordNightAction(gameId: string, targetPlayerId: string) {
@@ -917,6 +972,7 @@ export async function resetGameAction(gameId: string) {
   revalidatePath(`/events/${slug}`);
   revalidatePath(`/events/${slug}/players`);
   revalidatePath(`/events/${slug}/briefing`);
+  revalidatePath(`/events/${slug}/results`);
   revalidatePath("/dashboard");
   revalidatePath("/past");
   revalidatePath("/admin/events");

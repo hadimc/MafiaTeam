@@ -26,3 +26,14 @@ Registration is invite-only. As admin, open `/admin/users` to invite people, dis
 Sample event: `/events/friday-mafia-aug-21`.
 
 As narrator, open the event, finalize the scenario, then **Deal roles**. Players get a full-screen facedown card (hold to peek). The narrator board is `/games/:id/narrator`.
+
+## License
+
+MafiaTeam is **[PolyForm Noncommercial 1.0.0](LICENSE)**.
+
+You may run and adapt it for a personal or club Mafia night. Keep the license and copyright notice with any copy.
+
+You may **not** sell it, put it on an app store or marketplace, or otherwise use it to make money without a separate commercial license. To request one, [open an issue](https://github.com/hadimc/MafiaTeam/issues).
+
+Do not commit `prisma/club.local.json`, `.env`, or `.env.local` — those stay local.
+

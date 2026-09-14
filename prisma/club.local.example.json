@@ -1,17 +1,20 @@
 {
   "password": "ChangeMe123",
   "users": [
-    {
-      "username": "hadi",
-      "displayName": "هادی",
-      "displayNameEn": "Hadi",
-      "admin": true
-    },
-    {
-      "username": "ali",
-      "displayName": "علی",
-      "displayNameEn": "Ali",
-      "admin": false
-    }
+    { "username": "host", "displayName": "راوی", "displayNameEn": "Host", "admin": true },
+    { "username": "sara", "displayName": "سارا", "displayNameEn": "Sara" },
+    { "username": "nima", "displayName": "نیما", "displayNameEn": "Nima" },
+    { "username": "omid", "displayName": "امید", "displayNameEn": "Omid" },
+    { "username": "leila", "displayName": "لیلا", "displayNameEn": "Leila" },
+    { "username": "reza", "displayName": "رضا", "displayNameEn": "Reza" },
+    { "username": "elnaz", "displayName": "الناز", "displayNameEn": "Elnaz" },
+    { "username": "parsa", "displayName": "پارسا", "displayNameEn": "Parsa" },
+    { "username": "donya", "displayName": "دنیا", "displayNameEn": "Donya" },
+    { "username": "kasra", "displayName": "کسری", "displayNameEn": "Kasra" },
+    { "username": "hanieh", "displayName": "هانیه", "displayNameEn": "Hanieh" },
+    { "username": "yasamin", "displayName": "یاسمن", "displayNameEn": "Yasamin" },
+    { "username": "kian", "displayName": "کیان", "displayNameEn": "Kian" },
+    { "username": "roya", "displayName": "رویا", "displayNameEn": "Roya" },
+    { "username": "navid", "displayName": "نوید", "displayNameEn": "Navid" }
   ]
 }

@@ -1,18 +1,47 @@
 import { DEALABLE_ROLES } from "./catalog";
 import type { Lang } from "./i18n";
 
+export function peelScenarioLabel(raw: string, slug = "", titles: (string | null | undefined)[] = []) {
+  let value = (raw || "").trim();
+  if (!value) return "";
+  if (slug) {
+    const suffix = ` · ${slug}`;
+    if (value.endsWith(suffix)) value = value.slice(0, -suffix.length).trim();
+  }
+  const prefixes = titles.map((title) => (title ?? "").trim()).filter(Boolean);
+  let looping = true;
+  while (looping) {
+    looping = false;
+    for (const title of prefixes) {
+      const prefix = `${title} · `;
+      if (value.startsWith(prefix)) {
+        value = value.slice(prefix.length).trim();
+        looping = true;
+      }
+    }
+  }
+  const parts = value.split(" · ").map((part) => part.trim()).filter(Boolean);
+  const unique: string[] = [];
+  for (const part of parts) {
+    if (unique.at(-1) !== part) unique.push(part);
+  }
+  while (unique.length > 1 && prefixes.includes(unique[0] ?? "")) unique.shift();
+  return unique.join(" · ");
+}
+
 export function displayScenarioName(
   scenario: { name: string; nameEn: string },
   slug: string,
   lang: Lang,
+  event?: { title?: string; titleEn?: string },
 ) {
-  const suffix = ` · ${slug}`;
-  const en = scenario.nameEn.endsWith(suffix)
-    ? scenario.nameEn.slice(0, -suffix.length)
-    : scenario.nameEn;
-  if (lang === "fa") return scenario.name.trim() || en;
-  return en.trim() || scenario.name;
+  const titles = [event?.titleEn, event?.title];
+  const en = peelScenarioLabel(scenario.nameEn, slug, titles);
+  const fa = peelScenarioLabel(scenario.name, slug, titles);
+  if (lang === "fa") return fa || en || scenario.name;
+  return en || fa || scenario.nameEn;
 }
+
 
 export function briefingRoles<T extends { key: string; quantity: number }>(roles: T[]) {
   const byKey = new Map(roles.filter((role) => role.quantity > 0).map((role) => [role.key, role]));

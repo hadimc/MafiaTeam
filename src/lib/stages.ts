@@ -1,3 +1,5 @@
+import { DEFAULT_ZODIAC_RULES, zodiacShootsOnNight, type ZodiacRules, type ZodiacShootNights } from "./zodiac";
+
 export type Stage = { kind: "day" | "night"; n: number };
 
 export type StageTask = {
@@ -141,7 +143,7 @@ const NIGHT_TASKS: StageTask[] = [
 ];
 
 const MAFIA_LIKE_ORDER = ["godfather", "saul", "lecter", "matador", "mafioso"];
-const TOWN_LIKE_ORDER = ["watson", "leon", "kane", "detective", "constantine", "gunner", "villager"];
+const TOWN_LIKE_ORDER = ["watson", "leon", "kane", "detective", "constantine", "mayor", "gunner", "villager"];
 
 export type NightLine = "skip" | "record" | "cover";
 
@@ -245,6 +247,7 @@ export function nightTasks(
   hasDead: boolean,
   line: (roleKey: string) => NightLine,
   faceChangeDay: number | null = null,
+  shootNights: ZodiacShootNights = "even",
 ) {
   const anyMafia = MAFIA_LIKE_ORDER.some((key) => line(key) !== "skip");
   const anyTown = TOWN_LIKE_ORDER.some((key) => line(key) !== "skip");
@@ -259,7 +262,7 @@ export function nightTasks(
     if (task.key === "zodiac") {
       if (line("zodiac") === "skip") return false;
       if (stage.n === 0) return true;
-      return stage.n >= 2 && stage.n % 2 === 0;
+      return zodiacShootsOnNight(stage.n, shootNights);
     }
     if (task.key === "mafia") return anyMafia;
     if (task.key === "town") return anyTown;
@@ -310,6 +313,41 @@ export function activeJackCurse(
   actions: { actionType: string; dayNumber: number; targetPlayerId?: string | null }[],
 ) {
   return jackCurseHistory(actions, -1).active;
+}
+
+function exitCardMeta(raw?: string | null) {
+  try {
+    return JSON.parse(raw || "{}") as { key?: string; id?: string };
+  } catch {
+    return {};
+  }
+}
+
+/** Beautiful Mind can guess Jack, Jack’s curse, or Nostradamus. */
+export function beautifulMindHasGuess(
+  players: { id: string; roleKey: string; alive?: boolean }[],
+  actions: { actionType: string; dayNumber: number; targetPlayerId?: string | null }[],
+) {
+  if (players.some((player) => player.alive !== false && (player.roleKey === "jack" || player.roleKey === "nostradamus"))) {
+    return true;
+  }
+  const curse = activeJackCurse(actions);
+  return Boolean(curse && players.some((player) => player.alive !== false && player.id === curse.playerId));
+}
+
+export function beautifulMindDeckState(
+  cards: { id: string; key: string; used: boolean }[],
+  actions: { actionType: string; metadata?: string | null }[],
+) {
+  const card = cards.find((item) => item.key === "mind");
+  if (!card) return "absent" as const;
+  if (!card.used) return "in_deck" as const;
+  const drawn = actions.some((action) => {
+    if (action.actionType !== "exit_card") return false;
+    const meta = exitCardMeta(action.metadata);
+    return meta.key === "mind" && (!meta.id || meta.id === card.id);
+  });
+  return drawn ? ("drawn" as const) : ("removed" as const);
 }
 
 export function jackCurseRound(
@@ -404,7 +442,7 @@ export function gunnerActiveHolders(
 }
 
 const NIGHT_PHASES = new Set(["night", "intro_night", "night_resolution"]);
-const NIGHT_IMMUNE = new Set(["jack", "nostradamus", "zodiac"]);
+const NIGHT_IMMUNE = new Set(["jack", "nostradamus"]);
 const MAFIA_MAIN = ["mafiaShot", "sixthSense", "saul"] as const;
 export const NIGHT_REPLACEABLE = [
   ...MAFIA_MAIN,
@@ -570,6 +608,7 @@ export function resolveNight(
   actions: NightPickAction[],
   players: NightPlayer[],
   nightNumber: number,
+  zodiacRules: ZodiacRules = DEFAULT_ZODIAC_RULES,
 ) {
   if (nightNumber < 1) {
     return {
@@ -603,7 +642,21 @@ export function resolveNight(
   const leave = new Set<string>();
   const shieldBreakIds: string[] = [];
   const notes: string[] = [];
-  const immune = (player: NightPlayer) => NIGHT_IMMUNE.has(player.roleKey);
+  const immune = (player: NightPlayer) =>
+    NIGHT_IMMUNE.has(player.roleKey) ||
+    (player.roleKey === "zodiac" && zodiacRules.mortality === "immortal");
+  const zodiacShieldUp = (player: NightPlayer) =>
+    player.roleKey === "zodiac" &&
+    zodiacRules.mortality === "one_shield" &&
+    hasShield(actions, player.id, nightNumber);
+  const nightShieldUp = (player: NightPlayer) => {
+    const carries =
+      player.roleKey === "leon" ||
+      player.roleKey === "godfather" ||
+      (player.roleKey === "zodiac" && zodiacRules.mortality === "one_shield");
+    if (!carries || shieldBreakIds.includes(player.id)) return false;
+    return hasShield(actions, player.id, nightNumber);
+  };
   const droppedNote: Record<string, string> = {
     sixthSense: "Godfather is out. Sixth sense does not apply.",
     saul: "Saul is out. Purchase does not apply.",
@@ -709,6 +762,9 @@ export function resolveNight(
       } else if (target.roleKey === "leon" && hasShield(actions, target.id, nightNumber)) {
         shieldBreakIds.push(target.id);
         notes.push("Leon’s vest absorbed the mafia shot. They stay.");
+      } else if (zodiacShieldUp(target)) {
+        shieldBreakIds.push(target.id);
+        notes.push("Zodiac’s shield absorbed the mafia shot. They stay.");
       } else {
         leave.add(target.id);
         notes.push("Mafia shot stands. That player leaves.");
@@ -759,6 +815,9 @@ export function resolveNight(
     if (target) {
       if (immune(target)) {
         notes.push("Night-immune. Leon’s shot does nothing.");
+      } else if (zodiacShieldUp(target)) {
+        shieldBreakIds.push(target.id);
+        notes.push("Zodiac’s shield absorbed Leon’s shot. They stay.");
       } else if (target.faction === "citizen") {
         leave.add(leon.id);
         notes.push("Citizen hit. Leon is out. The citizen stays.");
@@ -772,6 +831,9 @@ export function resolveNight(
           leave.add(target.id);
           notes.push("Leon’s shot stands. That player leaves.");
         }
+      } else {
+        leave.add(target.id);
+        notes.push("Leon’s shot stands. That player leaves.");
       }
     }
   }
@@ -808,9 +870,12 @@ export function resolveNight(
   if (zodiacTargetId && zodiacPlayer && zodiacPlayer.alive !== false) {
     const target = byId.get(zodiacTargetId);
     if (target) {
-      if (target.roleKey === "watson") {
+      if (zodiacRules.cursedRole && target.roleKey === zodiacRules.cursedRole) {
         leave.add(zodiacPlayer.id);
-        notes.push("Zodiac misfired on the Doctor. The shot fails and Zodiac leaves instead.");
+        notes.push("Zodiac misfired on the cursed role. The shot fails and Zodiac leaves instead.");
+      } else if (!leave.has(target.id) && nightShieldUp(target)) {
+        shieldBreakIds.push(target.id);
+        notes.push("Zodiac’s shot hit the shield. That player stays.");
       } else {
         leave.add(target.id);
         notes.push("Zodiac’s shot stands. That player leaves.");
@@ -879,8 +944,9 @@ export function lastNightReport(
   actions: NightPickAction[],
   dayNumber: number,
   players: NightPlayer[],
+  zodiacRules: ZodiacRules = DEFAULT_ZODIAC_RULES,
 ) {
-  const result = resolveNight(actions, players, dayNumber - 1);
+  const result = resolveNight(actions, players, dayNumber - 1, zodiacRules);
   const applied = appliedNightOutcome(actions, dayNumber - 1);
   return {
     leaveIds: applied.leaveIds,

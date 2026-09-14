@@ -11,6 +11,9 @@ export type RoleDef = {
   nightOrder: number;
 };
 
+export type ZodiacMortality = "immortal" | "one_shield" | "no_shield";
+export type ZodiacShootNights = "all" | "odd" | "even";
+
 export type ScenarioConfig = {
   speakSeconds: number;
   challengeSeconds: number;
@@ -18,6 +21,9 @@ export type ScenarioConfig = {
   challengesPerDay: number;
   statusInquiries: number;
   nightOrder: string[];
+  zodiacMortality: ZodiacMortality;
+  zodiacShootNights: ZodiacShootNights;
+  zodiacCursedRole: string | null;
 };
 
 export type Phase =
@@ -59,16 +65,38 @@ export function defaultNext(from: Phase): Phase | null {
   return NEXT[from]?.[0] ?? null;
 }
 
-export function shuffle<T>(items: T[]): T[] {
+export type RandInt = (maxExclusive: number) => number;
+
+/** Unbiased integer in [0, maxExclusive). Uses CSPRNG so deals are not seeded from names or order. */
+export function randomInt(maxExclusive: number): number {
+  if (!Number.isInteger(maxExclusive) || maxExclusive <= 0) {
+    throw new Error("randomInt: maxExclusive must be a positive integer");
+  }
+  const cryptoObj = globalThis.crypto;
+  if (!cryptoObj?.getRandomValues) {
+    return Math.floor(Math.random() * maxExclusive);
+  }
+  const cap = 0x100000000;
+  const limit = cap - (cap % maxExclusive);
+  const buf = new Uint32Array(1);
+  let value = 0;
+  do {
+    cryptoObj.getRandomValues(buf);
+    value = buf[0];
+  } while (value >= limit);
+  return value % maxExclusive;
+}
+
+export function shuffle<T>(items: T[], rand: RandInt = randomInt): T[] {
   const copy = [...items];
   for (let i = copy.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = rand(i + 1);
     [copy[i], copy[j]] = [copy[j], copy[i]];
   }
   return copy;
 }
 
-export function buildRolePool(roles: RoleDef[]) {
+export function buildRolePool(roles: RoleDef[], rand: RandInt = randomInt) {
   const pool: Omit<RoleDef, "quantity">[] = [];
   for (const role of roles) {
     for (let i = 0; i < role.quantity; i++) {
@@ -76,15 +104,15 @@ export function buildRolePool(roles: RoleDef[]) {
       pool.push(rest);
     }
   }
-  return shuffle(pool);
+  return shuffle(pool, rand);
 }
 
-export function assignRoles(playerIds: string[], roles: RoleDef[]) {
-  const pool = buildRolePool(roles);
+export function assignRoles(playerIds: string[], roles: RoleDef[], rand: RandInt = randomInt) {
+  const pool = buildRolePool(roles, rand);
   if (pool.length !== playerIds.length) {
     throw new Error(`ROLE_COUNT_MISMATCH:${pool.length}:${playerIds.length}`);
   }
-  const seats = shuffle(playerIds);
+  const seats = shuffle(playerIds, rand);
   return seats.map((userId, index) => ({
     userId,
     seatNumber: index + 1,
@@ -112,12 +140,26 @@ export function eliminationResult(votes: { playerId: string; count: number }[]) 
   return { type: "tie" as const, playerIds: top.map((v) => v.playerId) };
 }
 
-export function randomBlueGreen(): "blue" | "green" {
-  return Math.random() < 0.5 ? "blue" : "green";
+export function randomBlueGreen(rand: RandInt = randomInt): "blue" | "green" {
+  return rand(2) === 0 ? "blue" : "green";
 }
 
-export function randomRedBlue(): "red" | "blue" {
-  return Math.random() < 0.5 ? "red" : "blue";
+export function randomRedBlue(rand: RandInt = randomInt): "red" | "blue" {
+  return rand(2) === 0 ? "red" : "blue";
+}
+
+function asZodiacMortality(value: unknown): ZodiacMortality {
+  return value === "one_shield" || value === "no_shield" || value === "immortal" ? value : "immortal";
+}
+
+function asZodiacShootNights(value: unknown): ZodiacShootNights {
+  return value === "all" || value === "odd" || value === "even" ? value : "even";
+}
+
+function asZodiacCursedRole(value: unknown): string | null {
+  if (value === undefined) return "watson";
+  if (value === null || value === "" || value === "none") return null;
+  return String(value);
 }
 
 export function parseConfig(raw: string): ScenarioConfig {
@@ -129,5 +171,8 @@ export function parseConfig(raw: string): ScenarioConfig {
     challengesPerDay: parsed.challengesPerDay ?? 1,
     statusInquiries: parsed.statusInquiries ?? 2,
     nightOrder: parsed.nightOrder ?? [],
+    zodiacMortality: asZodiacMortality(parsed.zodiacMortality),
+    zodiacShootNights: asZodiacShootNights(parsed.zodiacShootNights),
+    zodiacCursedRole: asZodiacCursedRole(parsed.zodiacCursedRole),
   };
 }

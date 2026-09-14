@@ -3,13 +3,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useLang, enName } from "@/lib/lang";
-import { Button, FactionPill, Panel, SeatAvatar, fieldClass } from "@/components/ui";
+import { Button, FactionPill, Panel, fieldClass } from "@/components/ui";
 import { RoleSteppers } from "@/components/RoleSteppers";
 import { RoleReveal } from "@/components/screens/RoleReveal";
 import { Roster, RosterPeek, AddPlayerForm, type ClubMember } from "@/components/screens/Roster";
-import { ShareJoinLink } from "@/components/CopyLink";
+import { CopyLinkIcon, ShareJoinLink } from "@/components/CopyLink";
+import { displayScenarioName } from "@/lib/briefing";
 import type { SessionUser } from "@/lib/auth";
 import { DEALABLE_ROLES, maxQuantity, playerCount, scenariosMatchingPlayerCount } from "@/lib/catalog";
+import { parseConfig } from "@/engine";
+import { zodiacRulesFromConfig, type ZodiacRules } from "@/lib/zodiac";
+import { ZodiacRulesFields } from "@/components/ZodiacRulesFields";
 import { MAX_NARRATORS, splitRoster } from "@/lib/roster";
 import { useLivePull } from "@/lib/live";
 import {
@@ -19,6 +23,7 @@ import {
   removePlayerFromEventAction,
   reopenScenarioAction,
   selectScenarioAction,
+  setZodiacRulesAction,
   switchSeatAction,
 } from "@/server/actions/events";
 import { dealRolesAction, closeGameAction, endGameAction, resetGameAction } from "@/server/actions/games";
@@ -29,11 +34,9 @@ import {
   canReopenScenario,
   eventLane,
   factionLabel,
-  gameOverview,
   hasFinalizedScenario,
   isJoinable,
   isRosterOpen,
-  sideLine,
 } from "@/lib/stats";
 
 type Person = { displayName: string; displayNameEn: string };
@@ -56,6 +59,8 @@ type EventPayload = {
     nameEn: string;
     attendeeCount: number;
     supportedPlayerCount: number;
+    configuration?: string;
+    roles?: { key: string; quantity: number }[];
   } | null;
   registrations: {
     userId: string;
@@ -93,13 +98,14 @@ type ScenarioOption = {
   narratorCount: number;
   supportedPlayerCount: number;
   active: boolean;
+  configuration?: string;
   roles: { key: string; quantity: number }[];
 };
 
-function qtyFrom(scenario?: ScenarioOption) {
+function qtyFrom(scenario?: { roles?: { key: string; quantity: number }[] }) {
   const qty: Record<string, number> = {};
   for (const role of DEALABLE_ROLES) qty[role.key] = 0;
-  if (!scenario) return qty;
+  if (!scenario?.roles) return qty;
   for (const role of scenario.roles) qty[role.key] = role.quantity;
   return qty;
 }
@@ -120,6 +126,9 @@ export function EventView({
   const [error, setError] = useState<string | null>(null);
   const [scenarioId, setScenarioId] = useState(event.scenarioId ?? "");
   const [qty, setQty] = useState(() => qtyFrom(scenarios.find((s) => s.id === event.scenarioId)));
+  const [zodiac, setZodiac] = useState<ZodiacRules>(() =>
+    zodiacRulesFromConfig(parseConfig(event.scenario?.configuration || "{}")),
+  );
   const [cardOpen, setCardOpen] = useState(false);
   const [warnReset, setWarnReset] = useState(false);
   const [adminDanger, setAdminDanger] = useState<null | "end" | "reset">(null);
@@ -130,7 +139,8 @@ export function EventView({
 
   useEffect(() => {
     setScenarioId(event.scenarioId ?? "");
-    setQty(qtyFrom(scenarios.find((s) => s.id === event.scenarioId)));
+    setQty(qtyFrom(event.scenario ?? scenarios.find((s) => s.id === event.scenarioId)));
+    setZodiac(zodiacRulesFromConfig(parseConfig(event.scenario?.configuration || "{}")));
     // Qty edits stay local until status or scenario changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [event.scenarioId, event.status]);
@@ -149,7 +159,6 @@ export function EventView({
   const dealtCards = event.status === "roles_assigned" || live;
   const winner = game?.winningFaction;
   const winnerFaction = winner ? asFaction(winner) : undefined;
-  const overview = game ? gameOverview(game) : null;
   const name = (person: Person) => enName(person);
   const dealt = playerCount(qty);
   const mine = game?.players.find((player) => player.userId === user.id);
@@ -181,6 +190,8 @@ export function EventView({
   async function pickScenario(id: string) {
     setScenarioId(id);
     setQty(qtyFrom(scenarios.find((s) => s.id === id) ?? catalog.find((s) => s.id === id)));
+    const picked = scenarios.find((s) => s.id === id) ?? catalog.find((s) => s.id === id);
+    setZodiac(zodiacRulesFromConfig(parseConfig(picked?.configuration || "{}")));
     setError(null);
     await selectScenarioAction(event.id, id);
   }
@@ -276,7 +287,11 @@ export function EventView({
         />
         <Row
           label={t("scenario")}
-          value={event.scenario ? event.scenario.nameEn || event.scenario.name : "—"}
+          value={
+            event.scenario
+              ? displayScenarioName(event.scenario, event.slug, "en", event)
+              : "—"
+          }
         />
         <Row
           label={t("status")}
@@ -297,18 +312,25 @@ export function EventView({
         ) : null}
       </Panel>
 
-      {hasFinalizedScenario(event.status) && event.scenario ? (
-        <Panel className="space-y-3">
-          <h2 className="display text-lg font-semibold">{t("scenarioBriefing")}</h2>
-          <p className="text-sm text-muted">{t("scenarioBriefingHint")}</p>
-          <Button href={`/events/${event.slug}/briefing`}>{t("openBriefing")}</Button>
-          <ShareJoinLink
-            slug={event.slug}
-            path={`/events/${event.slug}/briefing`}
-            label={t("shareBriefing")}
-            hint={t("shareBriefingHint")}
-          />
-        </Panel>
+      {(hasFinalizedScenario(event.status) && event.scenario) || (past && game?.winningFaction) ? (
+        <div className="space-y-2">
+          {hasFinalizedScenario(event.status) && event.scenario ? (
+            <div className="flex gap-2">
+              <Button href={`/events/${event.slug}/briefing`} className="flex-1">
+                {t("scenarioDescription")}
+              </Button>
+              <CopyLinkIcon path={`/events/${event.slug}/briefing`} />
+            </div>
+          ) : null}
+          {past && game?.winningFaction ? (
+            <div className="flex gap-2">
+              <Button href={`/events/${event.slug}/results`} className="flex-1">
+                {t("resultOverview")}
+              </Button>
+              <CopyLinkIcon path={`/events/${event.slug}/results`} />
+            </div>
+          ) : null}
+        </div>
       ) : null}
 
       {user.isAdmin && game && (!amNarrator || past) ? (
@@ -419,58 +441,6 @@ export function EventView({
         />
       ) : null}
 
-      {past && game?.players.length && overview ? (
-        <>
-          <Panel className="space-y-2 text-sm">
-            <h2 className="mb-3 text-sm text-muted">{t("overview")}</h2>
-            <Row label={t("daysPlayed")} value={`${t("day")} ${overview.days}`} />
-            <Row
-              label={t("players")}
-              value={`${overview.seated} ${t("seated").toLowerCase()} · ${overview.living} ${t("stillIn").toLowerCase()} · ${overview.out} ${t("eliminated").toLowerCase()}`}
-            />
-            <Row label={t("stillIn")} value={sideLine(overview.livingBySide)} />
-            <Row label={t("dealtSides")} value={sideLine(overview.dealtBySide)} />
-            {overview.durationLabel ? <Row label={t("duration")} value={overview.durationLabel} /> : null}
-          </Panel>
-          <Panel>
-            <h2 className="mb-3 text-sm text-muted">{t("results")}</h2>
-            <ol className="space-y-2">
-              {game.players.map((player) => {
-                const faction = asFaction(player.faction);
-                const won = winner && player.faction === winner;
-                return (
-                  <li
-                    key={player.id}
-                    className={`flex items-center justify-between gap-3 rounded-2xl bg-bg-elev px-3 py-2.5 ${
-                      player.alive ? "" : "opacity-55"
-                    }`}
-                  >
-                    <span className="flex min-w-0 items-center gap-3">
-                      <SeatAvatar
-                        name={name(player.user)}
-                        seat={player.seatNumber}
-                        faction={faction}
-                        alive={player.alive}
-                      />
-                      <span className="min-w-0">
-                        <span className="block truncate">{name(player.user)}</span>
-                        <span className="block truncate text-[11px] text-muted">
-                          {player.roleNameEn || player.roleName}
-                        </span>
-                      </span>
-                    </span>
-                    <span className="flex shrink-0 flex-col items-end gap-1">
-                      {faction ? <FactionPill faction={faction} /> : null}
-                      {won ? <span className="text-[11px] text-gold">{t("won")}</span> : null}
-                    </span>
-                  </li>
-                );
-              })}
-            </ol>
-          </Panel>
-        </>
-      ) : null}
-
       {canEditScenario && setup && rosterOpen ? (
         <form action={finalize}>
           <Panel className="space-y-3">
@@ -488,7 +458,7 @@ export function EventView({
               </option>
               {picker.map((scenario) => (
                 <option key={scenario.id} value={scenario.id}>
-                  {scenario.nameEn || scenario.name} · {scenario.supportedPlayerCount}{" "}
+                  {displayScenarioName(scenario, event.slug, "en", event)} · {scenario.supportedPlayerCount}{" "}
                   {t("players").toLowerCase()}
                 </option>
               ))}
@@ -505,6 +475,7 @@ export function EventView({
                     }))
                   }
                 />
+                <ZodiacRulesFields qty={qty} value={zodiac} onChange={setZodiac} />
                 <p className={`text-center text-sm ${dealt === players.length ? "text-citizen" : "text-mafia"}`}>
                   {dealt} {t("players").toLowerCase()} dealt · {players.length} seated
                 </p>
@@ -522,8 +493,22 @@ export function EventView({
         <Panel className="space-y-3">
           <h2 className="display text-lg font-semibold">{t("scenarioFinalized")}</h2>
           <p className="text-sm text-muted">
-            {event.scenario?.nameEn || event.scenario?.name} · {players.length} {t("players").toLowerCase()}
+            {event.scenario
+              ? `${displayScenarioName(event.scenario, event.slug, "en", event)} · ${players.length} ${t("players").toLowerCase()}`
+              : `${players.length} ${t("players").toLowerCase()}`}
           </p>
+          <ZodiacRulesFields
+            qty={qty}
+            value={zodiac}
+            onChange={(next) => {
+              setZodiac(next);
+              const data = new FormData();
+              data.set("zodiacMortality", next.mortality);
+              data.set("zodiacShootNights", next.shootNights);
+              data.set("zodiacCursedRole", next.cursedRole ?? "");
+              void setZodiacRulesAction(event.id, data);
+            }}
+          />
           {error ? <p className="text-sm text-mafia">{error}</p> : null}
           <Button onClick={deal}>{t("dealRoles")}</Button>
           <Button onClick={reopen} variant="ghost">
