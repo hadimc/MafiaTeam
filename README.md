@@ -33,3 +33,7 @@ Do not commit `.env`, `.env.local`, or SQLite databases either.
 Sample event: `/events/friday-mafia-aug-21`.
 
 As narrator, open the event, finalize the scenario, then **Deal roles**. Players get a full-screen facedown card (hold to peek). The narrator board is `/games/:id/narrator`.
+
+## Contributing
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md). Direct pushes are for **invited collaborators** only. Everyone else should fork and open a pull request from that fork.
