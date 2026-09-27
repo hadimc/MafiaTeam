@@ -47,6 +47,7 @@ export function AdminEvents({
 
   async function create(formData: FormData) {
     setError(null);
+    formData.set("tzOffset", String(new Date().getTimezoneOffset()));
     const result = await createEventAction(formData);
     if (result?.error) {
       setError(result.error);
@@ -72,6 +73,7 @@ export function AdminEvents({
             <input name="title" placeholder="Title" className={fieldClass} />
             <input name="location" placeholder={t("location")} className={fieldClass} />
             <input name="date" type="datetime-local" className={fieldClass} />
+            <input type="hidden" name="tzOffset" value={String(new Date().getTimezoneOffset())} />
             <label className="flex items-start gap-2 text-sm">
               <input type="checkbox" name="showHints" className="mt-0.5" />
               <span>

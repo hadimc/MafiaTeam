@@ -16,6 +16,7 @@ import {
 } from "@/lib/catalog";
 import { parseZodiacForm, withZodiacRoleCopy, zodiacConfigFields } from "@/lib/zodiac";
 import { peelScenarioLabel } from "@/lib/briefing";
+import { parseEventDateInput } from "@/lib/eventDate";
 
 function slugify(input: string) {
   return input
@@ -370,7 +371,9 @@ export async function createEventAction(formData: FormData) {
   const locationEn = String(formData.get("location") ?? "").trim();
   const location = locationEn;
   const dateRaw = String(formData.get("date") ?? "");
-  if (!title || !dateRaw) return { error: "missing" };
+  const tzOffset = Number(formData.get("tzOffset"));
+  const date = parseEventDateInput(dateRaw, tzOffset);
+  if (!title || !date) return { error: "missing" };
 
   const slugBase = slugify(String(formData.get("slug") ?? titleEn));
   let slug = slugBase;
@@ -388,7 +391,7 @@ export async function createEventAction(formData: FormData) {
       titleEn,
       location,
       locationEn,
-      date: new Date(dateRaw),
+      date,
       createdById: admin.id,
       status: "registration_open",
       showHints,
